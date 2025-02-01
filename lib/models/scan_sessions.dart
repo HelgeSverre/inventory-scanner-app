@@ -107,6 +107,10 @@ class ScanSession extends HiveObject {
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        'device_name': Settings.getValue<String>('device_name',
+            defaultValue: 'Unknown Device'),
+        'device_location':
+            Settings.getValue<String>('device_location', defaultValue: ''),
         'started_at': startedAt.toIso8601String(),
         'finished_at': finishedAt?.toIso8601String(),
         'scans': scans.map((scan) => scan.toJson()).toList(),
@@ -138,19 +142,24 @@ class ScannerModel extends Model {
   }
 
   // Session Management
-  void startNewSession([String? name]) {
+  Future<void> startNewSession([String? name]) async {
     _currentSession = ScanSession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name ?? 'Scan on ${DateTime.now().toString().split(' ')[0]}',
       startedAt: DateTime.now(),
     );
+    await _sessionsBox.put(
+      _currentSession!.id,
+      _currentSession!,
+    );
+
     notifyListeners();
   }
 
   void endCurrentSession() async {
     if (_currentSession != null) {
       _currentSession!.finishedAt = DateTime.now();
-      await _sessionsBox.put(_currentSession!.id, _currentSession!);
+      _currentSession!.save();
       _currentSession = null;
       notifyListeners();
     }
@@ -179,9 +188,9 @@ class ScannerModel extends Model {
     if (_currentSession == null) return false;
 
     // Check time between scans setting
-    final minTimeBetweenScans = Settings.getValue<int>(
+    final double? minTimeBetweenScans = Settings.getValue<double>(
       'min_time_between_scans',
-      defaultValue: 1000,
+      defaultValue: 1000.0,
     );
 
     if (_lastScanTime != null) {
@@ -379,9 +388,37 @@ class ScannerModel extends Model {
 
 // Add this utility method to ScanSession class for CSV export
   Future<String> exportToString() async {
-    final header = ['Timestamp', 'Barcode', 'Type', 'Product Name', 'Stock'];
-    final rows =
-        _currentSession?.scans.map((scan) => scan.toCsvRow()).toList() ?? [];
+    final deviceName = Settings.getValue<String>(
+      'device_name',
+      defaultValue: 'Unknown Device',
+    );
+    final location = Settings.getValue<String>(
+      'device_location',
+      defaultValue: '',
+    );
+
+    final header = [
+      'Timestamp',
+      'Device',
+      'Location',
+      'Barcode',
+      'Type',
+      'Product Name',
+      'Stock'
+    ];
+
+    final rows = _currentSession!.scans
+        .map((scan) => [
+              scan.timestamp.toIso8601String(),
+              deviceName,
+              location,
+              scan.barcode,
+              scan.barcodeType,
+              scan.productName ?? '',
+              scan.currentStock?.toString() ?? '',
+            ])
+        .toList();
+
     rows.insert(0, header);
 
     return const ListToCsvConverter().convert(rows);

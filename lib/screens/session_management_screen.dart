@@ -14,15 +14,17 @@ class SessionManagementScreen extends StatelessWidget {
       builder: (context, child, model) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Scanning Sessions'),
+            title: const Text('Sessions'),
             actions: [
               IconButton(
+                tooltip: "Sync all scan sessions",
                 icon: const Icon(Icons.cloud_upload),
                 onPressed: model.sessions.isEmpty
                     ? null
                     : () => _syncAllSessions(context, model),
               ),
               IconButton(
+                tooltip: "Delete all stored scan sessions",
                 icon: const Icon(Icons.delete_sweep),
                 onPressed: model.sessions.isEmpty
                     ? null
@@ -32,13 +34,16 @@ class SessionManagementScreen extends StatelessWidget {
           ),
           body: model.sessions.isEmpty
               ? const Center(
-                  child: Text('No scanning sessions yet'),
+                  child: Text('No sessions yet'),
                 )
               : ListView.builder(
                   itemCount: model.sessions.length,
                   itemBuilder: (context, index) {
-                    final session = model.sessions[index];
-                    return _buildSessionTile(context, session, model);
+                    return _buildSessionTile(
+                      context,
+                      model.sessions[index],
+                      model,
+                    );
                   },
                 ),
         );
@@ -47,7 +52,10 @@ class SessionManagementScreen extends StatelessWidget {
   }
 
   Widget _buildSessionTile(
-      BuildContext context, ScanSession session, ScannerModel model) {
+    BuildContext context,
+    ScanSession session,
+    ScannerModel model,
+  ) {
     return Dismissible(
       key: Key(session.id),
       background: Container(

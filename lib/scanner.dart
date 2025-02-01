@@ -12,6 +12,7 @@ class InventoryScanner extends StatefulWidget {
 
 class _InventoryScannerState extends State<InventoryScanner> {
   final MobileScannerController controller = MobileScannerController();
+  final TextEditingController _sessionNameController = TextEditingController();
   bool isBottomSheetOpen = false;
   bool isFlashOn = false;
 
@@ -40,10 +41,12 @@ class _InventoryScannerState extends State<InventoryScanner> {
           body: Stack(
             children: [
               // Camera Preview
-              MobileScanner(
-                controller: controller,
-                onDetect: _onDetect,
-              ),
+              1 == 1
+                  ? const Placeholder()
+                  : MobileScanner(
+                      controller: controller,
+                      onDetect: _onDetect,
+                    ),
 
               // Scan Overlay
               Center(
@@ -164,7 +167,7 @@ class _InventoryScannerState extends State<InventoryScanner> {
                             child: Row(
                               children: [
                                 Text(
-                                  'Scans (${model.currentSession?.scans.length ?? 0})',
+                                  'Scan: ${model.currentSession?.name} (${model.currentSession?.scans.length ?? 0})',
                                   style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -279,18 +282,13 @@ class _InventoryScannerState extends State<InventoryScanner> {
               ),
               const SizedBox(height: 24),
               TextField(
+                controller: _sessionNameController,
                 decoration: const InputDecoration(
                   labelText: 'Session Name (Optional)',
                   hintText: 'Enter session name or leave blank for default',
                   border: OutlineInputBorder(),
                 ),
-                onSubmitted: (value) {
-                  if (value.isNotEmpty) {
-                    model.startNewSession(value);
-                  } else {
-                    model.startNewSession();
-                  }
-                },
+                onSubmitted: (value) => _startNewSession(model),
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
@@ -299,7 +297,7 @@ class _InventoryScannerState extends State<InventoryScanner> {
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(16),
                 ),
-                onPressed: () => model.startNewSession(),
+                onPressed: () => _startNewSession(model),
               ),
               if (model.sessions.isNotEmpty) ...[
                 const SizedBox(height: 32),
@@ -322,9 +320,14 @@ class _InventoryScannerState extends State<InventoryScanner> {
                           '${session.scans.length} scans • ${_formatTime(session.startedAt)}',
                         ),
                         trailing: session.isSynced
-                            ? const Icon(Icons.check_circle,
-                                color: Colors.green)
-                            : const Icon(Icons.sync, color: Colors.orange),
+                            ? const Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                              )
+                            : const Icon(
+                                Icons.sync,
+                                color: Colors.orange,
+                              ),
                       );
                     },
                   ),
@@ -335,6 +338,11 @@ class _InventoryScannerState extends State<InventoryScanner> {
         ),
       ),
     );
+  }
+
+  void _startNewSession(ScannerModel model) {
+    final sessionName = _sessionNameController.text.trim();
+    model.startNewSession(sessionName.isNotEmpty ? sessionName : null);
   }
 
   Future<void> _showEndSessionDialog(
@@ -373,6 +381,7 @@ class _InventoryScannerState extends State<InventoryScanner> {
 
   @override
   void dispose() {
+    _sessionNameController.dispose();
     controller.dispose();
     super.dispose();
   }

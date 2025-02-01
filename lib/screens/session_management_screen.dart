@@ -24,7 +24,7 @@ class SessionManagementScreen extends StatelessWidget {
                     : () => _syncAllSessions(context, model),
               ),
               IconButton(
-                tooltip: "Delete all stored scan sessions",
+                tooltip: "Delete all stored scan  sessions",
                 icon: const Icon(Icons.delete_sweep),
                 onPressed: model.sessions.isEmpty
                     ? null
@@ -72,7 +72,7 @@ class SessionManagementScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '${session.scans.length} scans • ${_formatDateTime(session.startedAt)}',
+              '${session.events.length} scans (${session.barcodeCounts.length} unique) • ${_formatDateTime(session.startedAt)}',
             ),
             if (session.lastError != null)
               Text(
@@ -150,7 +150,7 @@ class SessionManagementScreen extends StatelessWidget {
 
   Future<void> _exportSession(BuildContext context, ScanSession session) async {
     try {
-      final file = await session.exportToCsv();
+      final file = await session.exportScanEventsToCsv();
       await Share.shareXFiles([XFile(file.path)], text: 'Scan Session Export');
     } catch (e) {
       if (context.mounted) {

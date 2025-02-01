@@ -28,6 +28,10 @@ class SettingsScreen extends StatelessWidget {
                 step: 100.0,
                 leading: Icon(Icons.timer),
               ),
+              CheckboxSettingsTile(
+                title: "Barcode Formats",
+                settingKey: "accepted_barcode_formats",
+              ),
             ],
           ),
 
@@ -41,9 +45,7 @@ class SettingsScreen extends StatelessWidget {
                 title: 'Device Name',
                 settingKey: 'device_name',
                 initialValue: '',
-                validator: (String? value) => value?.isEmpty ?? true
-                    ? 'Device name cannot be empty'
-                    : null,
+                helperText: "Optional: Name of scanner device",
               ),
               const TextInputSettingsTile(
                 title: 'Location',
@@ -60,11 +62,9 @@ class SettingsScreen extends StatelessWidget {
             title: 'HTTP Integration',
             subtitle: "If and how the app should send data via HTTP",
             children: [
-              SwitchSettingsTile(
+              SettingsGroup(
                 title: 'Enable HTTP callback',
-                settingKey: 'enable_http',
-                defaultValue: false,
-                childrenIfEnabled: [
+                children: [
                   TextInputSettingsTile(
                     title: 'URL',
                     settingKey: 'http_url',

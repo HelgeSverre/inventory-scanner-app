@@ -6,51 +6,34 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:scoped_model/scoped_model.dart';
 
 part 'scan_sessions.g.dart';
 
 @HiveType(typeId: 0)
-class ScanItem {
+class ScanEvent {
   @HiveField(0)
   final String barcode;
 
   @HiveField(1)
-  final String barcodeType;
+  final String barcodeFormat;
 
   @HiveField(2)
   final DateTime timestamp;
 
-  @HiveField(3)
-  final String? productName;
-
-  @HiveField(4)
-  final int? currentStock;
-
-  ScanItem({
+  ScanEvent({
     required this.barcode,
-    required this.barcodeType,
+    required this.barcodeFormat,
     required this.timestamp,
-    this.productName,
-    this.currentStock,
   });
 
   Map<String, dynamic> toJson() => {
         'barcode': barcode,
-        'barcode_type': barcodeType,
+        'barcode_type': barcodeFormat,
         'timestamp': timestamp.toIso8601String(),
-        'product_name': productName,
-        'current_stock': currentStock,
       };
-
-  List<dynamic> toCsvRow() => [
-        timestamp.toIso8601String(),
-        barcode,
-        barcodeType,
-        productName ?? '',
-        currentStock?.toString() ?? '',
-      ];
 }
 
 @HiveType(typeId: 1)
@@ -68,7 +51,7 @@ class ScanSession extends HiveObject {
   DateTime? finishedAt;
 
   @HiveField(4)
-  List<ScanItem> scans;
+  List<ScanEvent> events;
 
   @HiveField(5)
   bool isSynced;
@@ -84,38 +67,63 @@ class ScanSession extends HiveObject {
     required this.name,
     required this.startedAt,
     this.finishedAt,
-    List<ScanItem>? scans,
+    List<ScanEvent>? events,
     this.isSynced = false,
     this.lastError,
     this.lastSyncAttempt,
-  }) : scans = scans ?? [];
+  }) : events = events ?? [];
 
-  Future<File> exportToCsv() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/session_${id}_export.csv');
+  // Helper method to get count for a specific barcode
+  int getCount(String barcode) =>
+      events.where((e) => e.barcode == barcode).length;
 
-    final header = ['Timestamp', 'Barcode', 'Type', 'Product Name', 'Stock'];
-    final rows = scans.map((scan) => scan.toCsvRow()).toList();
-    rows.insert(0, header);
-
-    final csvData = const ListToCsvConverter().convert(rows);
-    await file.writeAsString(csvData);
-
-    return file;
+  // Helper to get unique barcodes with their counts
+  List<MapEntry<String, int>> get barcodeCounts {
+    final counts = <String, int>{};
+    for (final event in events) {
+      counts[event.barcode] = (counts[event.barcode] ?? 0) + 1;
+    }
+    return counts.entries.toList();
   }
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
-        'device_name': Settings.getValue<String>('device_name',
-            defaultValue: 'Unknown Device'),
-        'device_location':
-            Settings.getValue<String>('device_location', defaultValue: ''),
         'started_at': startedAt.toIso8601String(),
         'finished_at': finishedAt?.toIso8601String(),
-        'scans': scans.map((scan) => scan.toJson()).toList(),
+        'events': events.map((event) => event.toJson()).toList(),
         'is_synced': isSynced,
       };
+
+  Future<File> exportScanEventsToCsv() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/session_${id}_export.csv');
+    final deviceName = Settings.getValue<String>(
+      'device_name',
+      defaultValue: 'Unknown Device',
+    );
+    final location = Settings.getValue<String>(
+      'device_location',
+      defaultValue: '',
+    );
+
+    final header = ['Timestamp', 'Barcode', 'Type', 'Device', 'Location'];
+    final rows = events
+        .map((event) => [
+              event.timestamp.toIso8601String(),
+              event.barcode,
+              event.barcodeFormat,
+              deviceName,
+              location,
+            ])
+        .toList();
+
+    rows.insert(0, header);
+    final csvData = const ListToCsvConverter().convert(rows);
+    await file.writeAsString(csvData);
+
+    return file;
+  }
 }
 
 class ScannerModel extends Model {
@@ -134,33 +142,96 @@ class ScannerModel extends Model {
   // Initialize Hive and load data
   Future<void> init() async {
     await Hive.initFlutter();
-
+    Hive.registerAdapter(ScanEventAdapter());
     Hive.registerAdapter(ScanSessionAdapter());
-    Hive.registerAdapter(ScanItemAdapter());
 
     _sessionsBox = await Hive.openBox<ScanSession>(_sessionsBoxName);
   }
 
   // Session Management
   Future<void> startNewSession([String? name]) async {
+    var prefix = Settings.getValue<String>(
+          'file_prefix',
+          defaultValue: "Scan on ",
+        ) ??
+        "Scan on ";
+
     _currentSession = ScanSession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name ?? 'Scan on ${DateTime.now().toString().split(' ')[0]}',
+      name: name ?? '${prefix} ${DateTime.now().toString().split(' ')[0]}',
       startedAt: DateTime.now(),
     );
-    await _sessionsBox.put(
-      _currentSession!.id,
-      _currentSession!,
-    );
 
+    await _sessionsBox.put(_currentSession!.id, _currentSession!);
+
+    notifyListeners();
+  }
+
+  void resumeSession(ScanSession session) {
+    _currentSession = session;
+    notifyListeners();
+  }
+
+  leaveSession(ScannerModel model) async {
+    await _currentSession!.save();
+    _currentSession = null;
     notifyListeners();
   }
 
   void endCurrentSession() async {
     if (_currentSession != null) {
       _currentSession!.finishedAt = DateTime.now();
-      _currentSession!.save();
+      await _currentSession!.save();
       _currentSession = null;
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeBarcode(String barcode) async {
+    if (_currentSession != null) {
+      _currentSession!.events.removeWhere((e) => e.barcode == barcode);
+      await _currentSession!.save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> removeLastEventForBarcode(String barcode) async {
+    if (_currentSession != null) {
+      final index =
+          _currentSession!.events.lastIndexWhere((e) => e.barcode == barcode);
+      if (index != -1) {
+        _currentSession!.events.removeAt(index);
+        await _currentSession!.save();
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> addEventForBarcode(String barcode, String barcodeType) async {
+    if (_currentSession != null) {
+      final event = ScanEvent(
+        barcode: barcode,
+        barcodeFormat: barcodeType,
+        timestamp: DateTime.now(),
+      );
+      _currentSession!.events.add(event);
+      await _currentSession!.save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> undoLastScan() async {
+    if (_currentSession != null && _currentSession!.events.isNotEmpty) {
+      _currentSession!.events.removeLast();
+      await _currentSession!.save();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteScan(int index) async {
+    if (_currentSession != null && index < _currentSession!.events.length) {
+      _currentSession!.events.removeAt(index);
+      await _currentSession!.save();
       notifyListeners();
     }
   }
@@ -184,48 +255,59 @@ class ScannerModel extends Model {
     notifyListeners();
   }
 
-  Future<bool> processScan(String barcode, String barcodeType) async {
+  Future<bool> processScan(Barcode barcode) async {
     if (_currentSession == null) return false;
 
-    // Check time between scans setting
+    print("======== SCANNED: $barcode - ${barcode.format.name}");
+
+    // Check time between events setting
     final double? minTimeBetweenScans = Settings.getValue<double>(
       'min_time_between_scans',
       defaultValue: 1000.0,
     );
 
     if (_lastScanTime != null) {
-      final timeSinceLastScan =
-          DateTime.now().difference(_lastScanTime!).inMilliseconds;
-      if (timeSinceLastScan < minTimeBetweenScans!) return false;
+      final diff = DateTime.now().difference(_lastScanTime!).inMilliseconds;
+      if (diff < minTimeBetweenScans!) return false;
     }
 
-    final scan = ScanItem(
-      barcode: barcode,
-      barcodeType: barcodeType,
+    // Create and add the scan event
+    final event = ScanEvent(
+      barcode: barcode.rawValue.toString(),
+      barcodeFormat: barcode.format.name,
       timestamp: DateTime.now(),
     );
 
-    _currentSession!.scans.add(scan);
+    _currentSession!.events.add(event);
+    await _currentSession!.save();
     _lastScanTime = DateTime.now();
 
+    // Handle instant sync if enabled
     if (Settings.getValue<bool>('instant_sync', defaultValue: false) ?? false) {
-      await _syncScan(scan);
+      await _syncViaHttp(_currentSession!);
     }
 
     notifyListeners();
     return true;
   }
 
+  bool get syncViaHttp {
+    return Settings.getValue<bool>('enable_http', defaultValue: false) ?? false;
+  }
+
+  bool get syncViaFtp {
+    return Settings.getValue<bool>('enable_ftp', defaultValue: false) ?? false;
+  }
+
   Future<void> syncSession(ScanSession session) async {
     try {
       session.lastSyncAttempt = DateTime.now();
 
-      if (Settings.getValue<bool>('enable_http', defaultValue: false) ??
-          false) {
+      if (syncViaHttp) {
         await _syncViaHttp(session);
       }
 
-      if (Settings.getValue<bool>('enable_ftp', defaultValue: false) ?? false) {
+      if (syncViaFtp) {
         await _syncViaFtp(session);
       }
 
@@ -270,7 +352,7 @@ class ScannerModel extends Model {
       'session_name': session.name,
       'started_at': session.startedAt.toIso8601String(),
       'finished_at': session.finishedAt?.toIso8601String(),
-      'scans': session.scans.map((scan) => scan.toJson()).toList(),
+      'events': session.events.map((scan) => scan.toJson()).toList(),
       'device_info': await _getDeviceInfo(),
     };
 
@@ -316,7 +398,7 @@ class ScannerModel extends Model {
         Settings.getValue<bool>('use_sftp', defaultValue: true) ?? true;
 
     // Export session to CSV first
-    final csvFile = await session.exportToCsv();
+    final csvFile = await session.exportScanEventsToCsv();
     final fileName =
         'scan_session_${session.id}_${DateTime.now().millisecondsSinceEpoch}.csv';
 
@@ -344,40 +426,6 @@ class ScannerModel extends Model {
     }
   }
 
-  Future<void> _syncScan(ScanItem scan) async {
-    // Only sync individual scans if HTTP is enabled and instant sync is on
-    if (!(Settings.getValue<bool>('enable_http', defaultValue: false) ??
-            false) ||
-        !(Settings.getValue<bool>('instant_sync', defaultValue: false) ??
-            false)) {
-      return;
-    }
-
-    final url = Settings.getValue<String>('http_url', defaultValue: '');
-    if (url == null || url.isEmpty) return;
-
-    try {
-      final payload = {
-        'scan': scan.toJson(),
-        'device_info': await _getDeviceInfo(),
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(payload),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception('Instant sync failed: ${response.statusCode}');
-      }
-    } catch (e) {
-      // Log error but don't rethrow - we don't want to interrupt scanning
-      print('Warning: Instant sync failed: $e');
-    }
-  }
-
   Future<Map<String, dynamic>> _getDeviceInfo() async {
     // Basic device info - you could expand this
     return {
@@ -386,7 +434,7 @@ class ScannerModel extends Model {
     };
   }
 
-// Add this utility method to ScanSession class for CSV export
+  // Add this utility method to ScanSession class for CSV export
   Future<String> exportToString() async {
     final deviceName = Settings.getValue<String>(
       'device_name',
@@ -403,19 +451,16 @@ class ScannerModel extends Model {
       'Location',
       'Barcode',
       'Type',
-      'Product Name',
       'Stock'
     ];
 
-    final rows = _currentSession!.scans
+    final rows = _currentSession!.events
         .map((scan) => [
               scan.timestamp.toIso8601String(),
               deviceName,
               location,
               scan.barcode,
-              scan.barcodeType,
-              scan.productName ?? '',
-              scan.currentStock?.toString() ?? '',
+              scan.barcodeFormat,
             ])
         .toList();
 

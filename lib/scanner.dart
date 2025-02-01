@@ -12,8 +12,9 @@ class InventoryScanner extends StatefulWidget {
 
 class _InventoryScannerState extends State<InventoryScanner> {
   final MobileScannerController controller = MobileScannerController();
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
   final TextEditingController _sessionNameController = TextEditingController();
-  bool isBottomSheetOpen = false;
   bool isFlashOn = false;
 
   void _onDetect(BarcodeCapture capture) {
@@ -21,10 +22,7 @@ class _InventoryScannerState extends State<InventoryScanner> {
     final model = ScopedModel.of<ScannerModel>(context);
 
     for (final barcode in barcodes) {
-      final code = barcode.rawValue;
-      if (code != null) {
-        model.processScan(code, barcode.type.name);
-      }
+        model.processScan(barcode);
     }
   }
 
@@ -42,7 +40,15 @@ class _InventoryScannerState extends State<InventoryScanner> {
             children: [
               // Camera Preview
               1 == 1
-                  ? const Placeholder()
+                  ? Container(
+                      color: Colors.blueAccent,
+                      width: double.infinity,
+                      child: Center(
+                        child: Text(
+                          "Camera here",
+                        ),
+                      ),
+                    )
                   : MobileScanner(
                       controller: controller,
                       onDetect: _onDetect,
@@ -110,11 +116,20 @@ class _InventoryScannerState extends State<InventoryScanner> {
                             children: [
                               IconButton(
                                 icon: const Icon(
+                                  Icons.arrow_back,
+                                  color: Colors.white,
+                                ),
+                                onPressed: () => model.leaveSession(model),
+                              ),
+                              IconButton(
+                                icon: const Icon(
                                   Icons.stop_circle_outlined,
                                   color: Colors.white,
                                 ),
-                                onPressed: () =>
-                                    _showEndSessionDialog(context, model),
+                                onPressed: () => _showEndSessionDialog(
+                                  context,
+                                  model,
+                                ),
                               ),
                               IconButton(
                                 icon: Icon(
@@ -135,24 +150,28 @@ class _InventoryScannerState extends State<InventoryScanner> {
                     ),
                     const Spacer(),
                     // Bottom sheet
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      height: isBottomSheetOpen
-                          ? MediaQuery.of(context).size.height * 0.4
-                          : 80,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius:
-                            BorderRadius.vertical(top: Radius.circular(20)),
-                      ),
-                      child: Column(
-                        children: [
-                          // Bottom sheet handle
-                          GestureDetector(
-                            onTap: () => setState(
-                              () => isBottomSheetOpen = !isBottomSheetOpen,
+                    DraggableScrollableSheet(
+                      controller: _sheetController,
+                      initialChildSize: 0.5,
+                      minChildSize: 0.5,
+                      maxChildSize: 0.7,
+                      builder: (context, scrollController) => Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(20)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 10,
+                              spreadRadius: 0,
                             ),
-                            child: Container(
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            // Sheet handle
+                            Container(
                               width: 40,
                               height: 4,
                               margin: const EdgeInsets.symmetric(vertical: 12),
@@ -161,90 +180,152 @@ class _InventoryScannerState extends State<InventoryScanner> {
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Row(
-                              children: [
-                                Text(
-                                  'Scan: ${model.currentSession?.name} (${model.currentSession?.scans.length ?? 0})',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const Spacer(),
-                                if (model.currentSession?.scans.isNotEmpty ??
-                                    false)
-                                  TextButton.icon(
-                                    icon: const Icon(Icons.sync),
-                                    label: const Text('Sync'),
-                                    onPressed: () => model.syncSession(
-                                      model.currentSession!,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (isBottomSheetOpen)
-                            Expanded(
-                              child: ListView.builder(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                                itemCount:
-                                    model.currentSession?.scans.length ?? 0,
-                                itemBuilder: (context, index) {
-                                  final scan =
-                                      model.currentSession!.scans[index];
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      border: Border(
-                                        bottom: BorderSide(
-                                          color: Colors.grey[200]!,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Row(
+                            // Header with actions
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                scan.productName ??
-                                                    scan.barcode,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Type: ${scan.barcodeType}',
-                                                style: TextStyle(
-                                                  color: Colors.grey[600],
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
+                                        Text(
+                                          'Scan: ${model.currentSession?.name}',
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
                                         Text(
-                                          _formatTime(scan.timestamp),
+                                          '${model.currentSession?.events.length ?? 0} events (${model.currentSession?.barcodeCounts.length ?? 0} unique)',
                                           style: TextStyle(
                                             color: Colors.grey[600],
-                                            fontSize: 12,
+                                            fontSize: 14,
                                           ),
                                         ),
                                       ],
+                                    ),
+                                  ),
+                                  if (model.currentSession?.events.isNotEmpty ??
+                                      false) ...[
+                                    // Undo button
+                                    IconButton(
+                                      icon: const Icon(Icons.undo),
+                                      onPressed: () => model.undoLastScan(),
+                                      tooltip: 'Undo last scan',
+                                    ),
+                                    // Sync button
+                                    TextButton.icon(
+                                      icon: const Icon(Icons.sync),
+                                      label: const Text('Sync'),
+                                      onPressed: () => model
+                                          .syncSession(model.currentSession!),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            // Scan list - grouped by barcode
+                            Expanded(
+                              child: ListView.builder(
+                                controller: scrollController,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                itemCount: model
+                                        .currentSession?.barcodeCounts.length ??
+                                    0,
+                                itemBuilder: (context, index) {
+                                  final entry = model
+                                      .currentSession!.barcodeCounts[index];
+                                  final barcode = entry.key;
+                                  final count = entry.value;
+                                  final lastScan = model.currentSession!.events
+                                      .lastWhere((e) => e.barcode == barcode);
+
+                                  return Dismissible(
+                                    key: Key(barcode),
+                                    background: Container(
+                                      color: Colors.red,
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.only(right: 16),
+                                      child: const Icon(Icons.delete,
+                                          color: Colors.white),
+                                    ),
+                                    direction: DismissDirection.endToStart,
+                                    onDismissed: (_) =>
+                                        model.removeBarcode(barcode),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12),
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          bottom: BorderSide(
+                                              color: Colors.grey[200]!),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  barcode,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'Last scan: ${_formatTime(lastScan.timestamp)}',
+                                                  style: TextStyle(
+                                                    color: Colors.grey[600],
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          // Counter with remove/add scan events
+                                          Row(
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(Icons
+                                                    .remove_circle_outline),
+                                                onPressed: count > 1
+                                                    ? () => model
+                                                        .removeLastEventForBarcode(
+                                                            barcode)
+                                                    : null,
+                                              ),
+                                              Text(
+                                                count.toString(),
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(
+                                                    Icons.add_circle_outline),
+                                                onPressed: () =>
+                                                    model.addEventForBarcode(
+                                                        barcode,
+                                                        lastScan.barcodeFormat),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   );
                                 },
                               ),
                             ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -315,17 +396,20 @@ class _InventoryScannerState extends State<InventoryScanner> {
                     itemBuilder: (context, index) {
                       final session = model.sessions[index];
                       return ListTile(
+                        onTap: () => session.finishedAt == null
+                            ? model.resumeSession(session)
+                            : null,
                         title: Text(session.name),
                         subtitle: Text(
-                          '${session.scans.length} scans • ${_formatTime(session.startedAt)}',
+                          '${session.events.length} scans • ${_formatTime(session.startedAt)}',
                         ),
-                        trailing: session.isSynced
+                        trailing: session.finishedAt == null
                             ? const Icon(
-                                Icons.check_circle,
+                                Icons.play_arrow,
                                 color: Colors.green,
                               )
                             : const Icon(
-                                Icons.sync,
+                                Icons.check,
                                 color: Colors.orange,
                               ),
                       );

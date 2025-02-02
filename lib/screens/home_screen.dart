@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:inventory_scanner/models/scan_sessions.dart';
 import 'package:inventory_scanner/scanner.dart';
-import 'package:inventory_scanner/screens/session_management_screen.dart';
+import 'package:inventory_scanner/screens/session_history.dart';
 import 'package:inventory_scanner/screens/settings_screen.dart';
 import 'package:scoped_model/scoped_model.dart';
 
@@ -15,21 +15,26 @@ class HomeScreen extends StatelessWidget {
       builder: (context, child, model) {
         return Scaffold(
           appBar: AppBar(
+            leading: const Icon(Icons.qr_code),
+            // backgroundColor: Color(0xff011A99),
+            centerTitle: true,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  Settings.getValue<String>(
-                    'device_name',
-                    defaultValue: 'Unnamed Device',
-                  )!,
+                  Settings.getValue<String>('device_name') ?? 'Unnamed Device',
+                  style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                        height: 1,
+                      ),
                 ),
                 Text(
-                  Settings.getValue<String>(
-                    'device_location',
-                    defaultValue: 'No location set',
-                  )!,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  Settings.getValue<String>('device_location') ??
+                      'No location set',
+                  style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                        fontWeight: FontWeight.normal,
+                        height: 1,
+                      ),
                 ),
               ],
             ),
@@ -206,7 +211,7 @@ class HomeScreen extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const SessionManagementScreen(),
+                builder: (context) => const SessionHistoryScreen(),
               ),
             ),
           ),
@@ -242,7 +247,7 @@ class HomeScreen extends StatelessWidget {
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const SessionManagementScreen(),
+                  builder: (context) => const SessionHistoryScreen(),
                 ),
               ),
               child: const Text('View All'),
@@ -270,7 +275,7 @@ class HomeScreen extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ScannerScreen(),
+        builder: (context) => const ScannerScreen(),
         fullscreenDialog: true,
       ),
     );

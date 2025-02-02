@@ -22,8 +22,10 @@ linter:
   # producing the lint.
   rules:
     avoid_print: false
-    prefer_single_quotes: false
-    unnecessary_library_directive: true,
+    prefer_single_quotes: true
+    unnecessary_library_directive: true
+    unnecessary_brace_in_string_interps: false
+    use_build_context_synchronously: false
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

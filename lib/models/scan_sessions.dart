@@ -74,8 +74,9 @@ class ScanSession extends HiveObject {
   }) : events = events ?? [];
 
   // Helper method to get count for a specific barcode
-  int getCount(String barcode) =>
-      events.where((e) => e.barcode == barcode).length;
+  int getCount(String barcode) {
+    return events.where((e) => e.barcode == barcode).length;
+  }
 
   // Helper to get unique barcodes with their counts
   List<MapEntry<String, int>> get barcodeCounts {
@@ -84,6 +85,13 @@ class ScanSession extends HiveObject {
       counts[event.barcode] = (counts[event.barcode] ?? 0) + 1;
     }
     return counts.entries.toList();
+  }
+
+  // Helper to get unique barcodes with their counts
+  List<MapEntry<String, int>> get sortedBarcodeCounts {
+    return barcodeCounts
+      ..sort((a, b) => b.value.compareTo(a.value))
+      ..take(5);
   }
 
   Map<String, dynamic> toJson() => {
@@ -127,7 +135,6 @@ class ScanSession extends HiveObject {
 }
 
 class ScannerModel extends Model {
-  static const String _sessionsBoxName = 'scanning_sessions';
   late Box<ScanSession> _sessionsBox;
   ScanSession? _currentSession;
   DateTime? _lastScanTime;
@@ -145,16 +152,16 @@ class ScannerModel extends Model {
     Hive.registerAdapter(ScanEventAdapter());
     Hive.registerAdapter(ScanSessionAdapter());
 
-    _sessionsBox = await Hive.openBox<ScanSession>(_sessionsBoxName);
+    _sessionsBox = await Hive.openBox<ScanSession>('scan_sessions');
   }
 
   // Session Management
   Future<void> startNewSession([String? name]) async {
     var prefix = Settings.getValue<String>(
           'file_prefix',
-          defaultValue: "Scan on ",
+          defaultValue: 'Scan on ',
         ) ??
-        "Scan on ";
+        'Scan on ';
 
     _currentSession = ScanSession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -267,7 +274,7 @@ class ScannerModel extends Model {
   Future<bool> processScan(Barcode barcode) async {
     if (_currentSession == null) return false;
 
-    print("======== SCANNED: $barcode - ${barcode.format.name}");
+    print('======== SCANNED: $barcode - ${barcode.format.name}');
 
     // Check time between events setting
     final double? minTimeBetweenScans = Settings.getValue<double>(
@@ -420,8 +427,8 @@ class ScannerModel extends Model {
       final ftpClient = FTPConnect(
         server,
         port: port,
-        user: username ?? "",
-        pass: password ?? "",
+        user: username ?? '',
+        pass: password ?? '',
       );
 
       try {

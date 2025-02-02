@@ -389,17 +389,6 @@ class _ScannerScreenState extends State<ScannerScreen>
               icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
               onPressed: () => _cameraController.switchCamera(),
             ),
-            IconButton(
-              icon: const Icon(Icons.code, color: Colors.red),
-              onPressed: () {
-                ScopedModel.of<ScannerModel>(context).processScan(
-                  const Barcode(
-                    format: BarcodeFormat.ean13,
-                    rawValue: '7071089087940',
-                  ),
-                );
-              },
-            ),
           ],
         ),
       ),

@@ -3,6 +3,7 @@ import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:inventory_scanner/models/scan_sessions.dart';
 import 'package:inventory_scanner/screens/home_screen.dart';
 import 'package:scoped_model/scoped_model.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +16,9 @@ void main() async {
   // Initialize scanner model
   final model = ScannerModel();
   await model.init();
+
+  // TODO: remove
+  WakelockPlus.enable();
 
   runApp(
     ScopedModel<ScannerModel>(

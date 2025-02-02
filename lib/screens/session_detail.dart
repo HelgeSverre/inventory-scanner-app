@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:inventory_scanner/exporter.dart';
+import 'package:inventory_scanner/misc.dart';
 import 'package:inventory_scanner/models/scan_sessions.dart';
 import 'package:scoped_model/scoped_model.dart';
 
@@ -46,8 +47,16 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                 PopupMenuButton(
                   itemBuilder: (context) => [
                     const PopupMenuItem(
-                      value: 'export_csv',
-                      child: Text('Export CSV'),
+                      value: 'save_csv',
+                      child: Text('Export CSV file'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'save_json',
+                      child: Text('Export JSON file'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'share_csv',
+                      child: Text('Share CSV'),
                     ),
                     const PopupMenuItem(
                       value: 'share_json',
@@ -120,19 +129,26 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
               'Information',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 16),
             _buildInfoRow('Started', _formatDateTime(widget.session.startedAt)),
             _buildInfoRow(
-                'Finished', _formatDateTime(widget.session.finishedAt)),
+              'Finished',
+              widget.session.finishedAt?.format("yyyy-MM-dd HH:mm:ss"),
+            ),
             _buildInfoRow('Duration', _calculateDuration()),
             _buildInfoRow('Session ID', widget.session.id),
             if (widget.session.lastSyncAttempt != null)
               _buildInfoRow(
                 'Last Sync',
                 _formatDateTime(widget.session.lastSyncAttempt!),
+              ),
+            if (widget.session.lastError != null)
+              _buildInfoBox(
+                'Last Sync Error',
+                widget.session.lastError,
               ),
           ],
         ),
@@ -151,7 +167,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
               'Statistics',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 16),
@@ -184,7 +200,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
               'Most Scanned',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 16),
@@ -201,7 +217,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                       '${entry.value} scans',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.secondary,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -233,18 +249,24 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
         final event = events[offset];
 
         return ListTile(
+          contentPadding: EdgeInsets.all(4),
+          tileColor: Theme.of(context).cardColor,
+          minLeadingWidth: 80,
           leading: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${event.timestamp.hour}:${event.timestamp.minute.toString().padLeft(2, '0')}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text(
-                '${event.timestamp.day}/${event.timestamp.month}',
+                event.timestamp.format("yyyy-MM-dd"),
                 style: TextStyle(
                   color: Colors.grey[600],
-                  fontSize: 12,
+                  fontSize: 14,
+                ),
+              ),
+              Text(
+                event.timestamp.format("HH:mm"),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -294,10 +316,47 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
     );
   }
 
+  Widget _buildInfoBox(String label, String? value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Flexible(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: Colors.white.withOpacity(0.2),
+              ),
+              padding: const EdgeInsets.all(8),
+              child: Text(
+                value ?? 'N/A',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontFamily: "monospace",
+                  fontSize: 12,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.left,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatDateTime(DateTime? dateTime) {
-    if (dateTime == null) return 'N/A';
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year} '
-        '${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+    return dateTime == null ? 'N/A' : dateTime.format("yyyy-MM-dd HH:mm:ss");
   }
 
   String _calculateDuration() {
@@ -336,7 +395,10 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
           FilledButton(
             child: const Text('Rename'),
             onPressed: () {
-              model.renameSession(widget.session.id, controller.text.trim());
+              model.renameSession(
+                widget.session.id,
+                controller.text.trim(),
+              );
               Navigator.pop(context);
             },
           ),
@@ -352,7 +414,22 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
   ) async {
     try {
       switch (action) {
-        case 'export_csv':
+        case 'save_csv':
+          if (await DataExporter.saveCsvToDisk(widget.session)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Successfully saved CSV file')),
+            );
+          }
+          break;
+
+        case 'save_json':
+          if (await DataExporter.saveJsonToDisk(widget.session)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Successfully saved JSON file')),
+            );
+          }
+          break;
+        case 'share_csv':
           await DataExporter.shareCsv(widget.session);
           break;
         case 'share_json':
@@ -380,8 +457,13 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Export failed: $e'),
-          backgroundColor: Colors.red,
+          content: Text(
+            "Export failed: \n$e",
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
         ),
       );
     }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 import 'package:http/http.dart' as http;
@@ -12,6 +13,48 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class DataExporter {
+  static Future<bool> saveCsvToDisk(ScanSession session) async {
+    // Let user pick a directory
+    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    if (selectedDirectory == null) {
+      print("User canceled the directory selection.");
+      return false;
+    }
+
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+
+    // Save files in the chosen directory
+    await _createCsvEventLog(session, Directory(selectedDirectory), timestamp);
+    await _createCsvSummary(session, Directory(selectedDirectory), timestamp);
+
+    return true;
+  }
+
+  static Future<bool> saveJsonToDisk(ScanSession session) async {
+    // Let user pick a directory
+    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    if (selectedDirectory == null) {
+      print("User canceled the directory selection.");
+      return false;
+    }
+
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+
+    final jsonString = const JsonEncoder.withIndent('  ').convert(
+      _formatJson(session),
+    );
+
+    final file = File(path.join(
+      selectedDirectory,
+      'session_${session.id}_events_$timestamp.json',
+    ));
+
+    await file.writeAsString(jsonString);
+    print('File saved to: ${file.path}');
+
+    return true;
+  }
+
   // File export methods
   static Future<void> shareCsv(ScanSession session) async {
     final directory = await getApplicationDocumentsDirectory();
@@ -142,8 +185,10 @@ class DataExporter {
   ) async {
     final device = Settings.getValue<String>('device_name',
         defaultValue: 'Unknown Device');
-    final location =
-        Settings.getValue<String>('device_location', defaultValue: '');
+    final location = Settings.getValue<String>(
+      'device_location',
+      defaultValue: '',
+    );
 
     final rows = [
       // Simple header row with column names
@@ -186,8 +231,10 @@ class DataExporter {
       'device_name',
       defaultValue: 'Unknown Device',
     );
-    final location =
-        Settings.getValue<String>('device_location', defaultValue: '');
+    final location = Settings.getValue<String>(
+      'device_location',
+      defaultValue: '',
+    );
 
     // Group and sort events
     final barcodeGroups = <String, List<ScanEvent>>{};
@@ -231,6 +278,7 @@ class DataExporter {
       directory.path,
       'session_${session.id}_inventory_$timestamp.csv',
     ));
+
     await file.writeAsString(const ListToCsvConverter().convert(rows));
 
     return file;
@@ -241,8 +289,10 @@ class DataExporter {
       'device_name',
       defaultValue: 'Unknown Device',
     );
-    final location =
-        Settings.getValue<String>('device_location', defaultValue: '');
+    final location = Settings.getValue<String>(
+      'device_location',
+      defaultValue: '',
+    );
 
     return {
       'session': {

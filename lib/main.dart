@@ -1,3 +1,4 @@
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:inventory_scanner/models/scan_sessions.dart';
@@ -33,21 +34,27 @@ class ScannerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var brightness = MediaQuery
+        .of(context)
+        .platformBrightness;
+
     return MaterialApp(
-      title: 'Inventory Scanner',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        cardTheme: CardTheme.of(context).copyWith(
-          elevation: 0.5,
-        ),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blue,
-          // brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-        // brightness: Brightness.dark,
-      ),
-      home: const DashboardScreen(),
-    );
+        title: 'Inventory Scanner',
+        debugShowCheckedModeBanner: false,
+        theme: FluentThemeData(
+          accentColor: Colors.blue,
+        )
+        // theme: ThemeData(
+        //   cardTheme: CardTheme.of(context).copyWith(
+        //     elevation: 0.5,
+        //   ),
+        //   colorScheme: ColorScheme.fromSeed(
+        //     seedColor: Colors.blue,
+        //     brightness: brightness,
+        //   ),
+        //   useMaterial3: true,
+        //   brightness: brightness,
+        // ),
+        home: const DashboardScreen(),);
   }
 }

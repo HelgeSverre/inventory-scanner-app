@@ -22,6 +22,13 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
 
       final config = jsonDecode(response.body) as Map<String, dynamic>;
 
+      if (config.isEmpty) {
+        throw Exception('Empty configuration');
+      }
+
+      // Save the URL
+      Settings.setValue("remote_config_url", url);
+
       // Device Config
       if (config['device'] != null) {
         final device = config['device'] as Map<String, dynamic>;
@@ -125,6 +132,17 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
       ),
       body: ListView(
         children: [
+          // REMOTE CONFIGURATION
+          // -------------------------------------------------------------------
+          TextInputSettingsTile(
+            title: 'Remote Config URL',
+            settingKey: 'remote_config_url',
+            helperText: 'URL of the remote configuration service',
+            // initialValue: '',
+            keyboardType: TextInputType.url,
+            onChange: (value) => setState(() => fetchConfigFromUrl(value)),
+          ),
+
           // DEVICE CONFIGURATION
           // -------------------------------------------------------------------
           ExpandableSettingsTile(
@@ -159,7 +177,7 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
                 subtitle: 'Minimum time between scans in milliseconds',
                 decimalPrecision: 0,
                 eagerUpdate: true,
-                onChange: (value) => setState(() => print(value)),
+                onChange: (value) => setState(() {}),
               ),
               const SwitchSettingsTile(
                 title: 'Real-time Sync',
@@ -167,78 +185,55 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
                 settingKey: 'instant_sync',
                 enabledLabel: 'Instant sync',
                 disabledLabel: 'Manual sync',
-              ),
-            ],
-          ),
-
-          // REMOTE CONFIGURATION
-          // -------------------------------------------------------------------
-          const ExpandableSettingsTile(
-            title: 'Remote Configuration',
-            subtitle: 'Settings for remote configuration service',
-            children: [
-              TextInputSettingsTile(
-                title: 'Device ID',
-                settingKey: 'remote_config_id',
-                helperText: 'Leave blank to auto-generate device identifier',
-                initialValue: '',
-              ),
-              TextInputSettingsTile(
-                title: 'Service URL',
-                settingKey: 'remote_config_url',
-                helperText: 'URL of the remote configuration service',
-                initialValue: '',
+                showDivider: false,
               ),
             ],
           ),
 
           // EPCIS SETTINGS
           // -------------------------------------------------------------------
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: const ExpandableSettingsTile(
-              title: 'EPCIS Configuration',
-              subtitle: 'Configure EPCIS integration settings',
-              children: [
-                TextInputSettingsTile(
-                  title: 'Company Namespace',
-                  settingKey: 'epcis_namespace',
-                  initialValue: 'mycompany',
-                  helperText: 'Your company identifier (Example: initech)',
-                ),
-                TextInputSettingsTile(
-                  title: 'Location ID',
-                  settingKey: 'epcis_location',
-                  initialValue: '',
-                  helperText:
-                      'EPCIS location identifier (Example: warehouse-01)',
-                ),
-                TextInputSettingsTile(
-                  title: 'Device ID',
-                  settingKey: 'epcis_device',
-                  initialValue: '',
-                  helperText: 'EPCIS device identifier (Example: scanner-01)',
-                ),
-                RadioSettingsTile(
-                  title: 'Scan Mode',
-                  subtitle: 'Choose scan data structure format',
-                  settingKey: 'epcis_mode',
-                  showDivider: false,
-                  values: {
-                    'epcList': 'Individual Scans (epcList)',
-                    'quantityList': 'Aggregated Counts (quantityList)',
-                  },
-                  selected: '',
-                ),
-                TextInputSettingsTile(
-                  title: 'HTTP Endpoint',
-                  settingKey: 'epcis_url',
-                  initialValue:
-                      'https://webhook.site/0613bbc2-0873-465c-9f9b-32f8807ea822',
-                  helperText: 'API endpoint for EPCIS sync',
-                ),
-              ],
-            ),
+          const ExpandableSettingsTile(
+            title: 'EPCIS Configuration',
+            subtitle: 'Configure EPCIS integration settings',
+            children: [
+              TextInputSettingsTile(
+                title: 'Company Namespace',
+                settingKey: 'epcis_namespace',
+                initialValue: 'mycompany',
+                helperText: 'Your company identifier (Example: initech)',
+              ),
+              TextInputSettingsTile(
+                title: 'Location ID',
+                settingKey: 'epcis_location',
+                initialValue: '',
+                helperText: 'EPCIS location identifier (Example: warehouse-01)',
+              ),
+              TextInputSettingsTile(
+                title: 'Device ID',
+                settingKey: 'epcis_device',
+                initialValue: '',
+                helperText: 'EPCIS device identifier (Example: scanner-01)',
+              ),
+              RadioSettingsTile(
+                title: 'Scan Mode',
+                subtitle: 'Choose scan data structure format',
+                settingKey: 'epcis_mode',
+                showDivider: false,
+                values: {
+                  'epcList': 'Individual Scans (epcList)',
+                  'quantityList': 'Aggregated Counts (quantityList)',
+                },
+                selected: '',
+              ),
+              TextInputSettingsTile(
+                title: 'HTTP Endpoint',
+                settingKey: 'epcis_url',
+                initialValue:
+                    'https://example.com/epcis/Service/Poll/SimpleEvent',
+                helperText: 'API endpoint for EPCIS sync',
+                keyboardType: TextInputType.url,
+              ),
+            ],
           ),
 
           // DATA EXPORT SETTINGS
@@ -246,10 +241,11 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
           const ExpandableSettingsTile(
             title: 'Data Export',
             subtitle: 'Configure data export methods',
+            showDivider: false,
             children: [
               // HTTP Export Settings
               SettingsGroup(
-                title: 'HTTP Export',
+                title: 'HTTP',
                 children: [
                   SwitchSettingsTile(
                     title: 'Enable HTTP Export',
@@ -285,7 +281,7 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
 
               // FTP Export Settings
               SettingsGroup(
-                title: 'FTP Export',
+                title: 'FTP',
                 children: [
                   SwitchSettingsTile(
                     title: 'Enable FTP Export',

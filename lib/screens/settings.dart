@@ -94,8 +94,13 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load configuration: $e'),
-            backgroundColor: Colors.red,
+            content: Text(
+              'Failed to load configuration: $e',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
           ),
         );
       }

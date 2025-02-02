@@ -409,7 +409,15 @@ class _ScannerScreenState extends State<ScannerScreen>
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.error,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.errorContainer,
+      ),
     );
   }
 }

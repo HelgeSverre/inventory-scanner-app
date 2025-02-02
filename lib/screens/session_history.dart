@@ -217,8 +217,13 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
           } catch (e) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Failed to sync session ${session.id}: $e'),
-                backgroundColor: Colors.red,
+                content: Text(
+                  'Failed to sync session ${session.id}: $e',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+                backgroundColor: Theme.of(context).colorScheme.errorContainer,
               ),
             );
           }
@@ -236,8 +241,13 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
         Navigator.pop(context); // Dismiss progress indicator
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('CSV export failed: $e'),
-            backgroundColor: Colors.red,
+            content: Text(
+              'CSV export failed: $e',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
           ),
         );
       }
@@ -259,7 +269,15 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
+          SnackBar(
+            content: Text(
+              'Export failed: $e',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.errorContainer,
+          ),
         );
       }
     }

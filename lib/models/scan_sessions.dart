@@ -328,7 +328,6 @@ class ScannerModel extends Model {
     return true;
   }
 
-// Add new method for instant sync
   Future<void> _syncInstantScan(ScanSession session, ScanEvent event) async {
     final useHttp =
         Settings.getValue<bool>('enable_http', defaultValue: false) ?? false;

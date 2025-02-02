@@ -249,7 +249,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
         final event = events[offset];
 
         return ListTile(
-          contentPadding: EdgeInsets.all(4),
+          contentPadding: const EdgeInsets.all(4),
           tileColor: Theme.of(context).cardColor,
           minLeadingWidth: 80,
           leading: Column(

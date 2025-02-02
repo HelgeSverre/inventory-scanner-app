@@ -88,12 +88,75 @@ class DataExporter {
     );
   }
 
+  static String _replacePlaceholders(
+    String template, {
+    required ScanSession session,
+    required String type, // 'events' or 'inventory'
+  }) {
+    final date = DateTime.now();
+    final device = Settings.getValue<String>('device_name') ?? "";
+    final location = Settings.getValue<String>('device_location') ?? "";
+    final timestamp = date.toIso8601String().replaceAll(':', '-');
+
+    return template
+        .replaceAll('[DATE]',
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}')
+        .replaceAll('[YEAR]', date.year.toString())
+        .replaceAll('[MONTH]', date.month.toString().padLeft(2, '0'))
+        .replaceAll('[DAY]', date.day.toString().padLeft(2, '0'))
+        .replaceAll('[DEVICE]', device)
+        .replaceAll('[LOCATION]', location)
+        .replaceAll('[SESSION_ID]', session.id)
+        .replaceAll('[SESSION_NAME]', session.name)
+        .replaceAll('[TYPE]', type)
+        .replaceAll('[TIMESTAMP]', timestamp);
+  }
+
+  static Future<String> _getRemotePath(
+      FTPConnect client, ScanSession session, String type) async {
+    final template = Settings.getValue<String>('ftp_path') ??
+        '/scans/[DATE]/session_[SESSION_ID]_[TYPE].csv';
+    final fullPath =
+        _replacePlaceholders(template, session: session, type: type);
+
+    // Ensure directory exists
+    final dir = path.dirname(fullPath);
+    if (dir != '.') {
+      final dirs = dir.split('/')..removeWhere((d) => d.isEmpty);
+      var currentPath = '';
+      for (final d in dirs) {
+        currentPath += '/$d';
+        await client.createFolderIfNotExist(currentPath);
+      }
+    }
+
+    return fullPath;
+  }
+
   // Remote export methods
   static Future<void> uploadToFtp(ScanSession session) async {
     final server = Settings.getValue<String>('ftp_server');
     if (server == null || server.isEmpty) {
       throw Exception('FTP server not configured');
     }
+
+    // Validate port
+    final portStr = Settings.getValue<String>('ftp_port') ?? '21';
+    final port = int.tryParse(portStr);
+    if (port == null || port < 1 || port > 65535) {
+      throw Exception('Invalid port number: must be between 1 and 65535');
+    }
+
+    final username = Settings.getValue<String>('ftp_username') ?? '';
+    final password = Settings.getValue<String>('ftp_password') ?? '';
+    final timeout = Settings.getValue<int>('ftp_timeout') ?? 30;
+    final useFtps = Settings.getValue<bool>('use_ftps') ?? false;
+
+    // Get transfer settings
+    final transferMode =
+        Settings.getValue<String>('ftp_transfer_mode') ?? 'passive';
+    final transferType =
+        Settings.getValue<String>('ftp_transfer_type') ?? 'auto';
 
     final directory = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
@@ -102,28 +165,47 @@ class DataExporter {
     final eventLog = await _createCsvEventLog(session, directory, timestamp);
     final summary = await _createCsvSummary(session, directory, timestamp);
 
-    // Upload
-    final client = FTPConnect(
+    // Create FTP client
+    final ftpClient = FTPConnect(
       server,
-      port: int.tryParse(Settings.getValue<String>('ftp_port') ?? '21') ?? 21,
-      user: Settings.getValue<String>('ftp_username') ?? 'anonymous',
-      pass: Settings.getValue<String>('ftp_password') ?? '',
+      port: port,
+      user: username,
+      pass: password,
+      timeout: timeout,
+      securityType: useFtps ? SecurityType.FTPS : SecurityType.FTP,
     );
 
     try {
-      await client.connect();
-      final remotePath = await _createFtpDirectory(client);
+      await ftpClient.connect();
 
-      for (final file in [eventLog, summary]) {
-        await client.uploadFile(
-          file,
-          sRemoteName: '$remotePath/${path.basename(file.path)}',
+      // Set transfer mode
+      if (transferMode == 'active') {
+        ftpClient.transferMode = TransferMode.active;
+      } else {
+        ftpClient.transferMode = TransferMode.passive;
+      }
+
+      // Set transfer type if not 'auto'
+      if (transferType != 'auto') {
+        await ftpClient.setTransferType(
+          transferType == 'ascii' ? TransferType.ascii : TransferType.binary,
         );
       }
+
+      // Upload files
+      for (final file in [eventLog, summary]) {
+        final type = file == eventLog ? 'events' : 'inventory';
+        final remotePath = await _getRemotePath(ftpClient, session, type);
+        await ftpClient.uploadFile(file, sRemoteName: remotePath);
+      }
     } finally {
-      await client.disconnect();
-      // Cleanup
-      await Future.wait([eventLog.delete(), summary.delete()]);
+      await ftpClient.disconnect();
+
+      // Cleanup temporary files
+      await Future.wait([
+        eventLog.delete(),
+        summary.delete(),
+      ]);
     }
   }
 
@@ -371,21 +453,5 @@ class DataExporter {
                 .toList(),
       }
     };
-  }
-
-  static Future<String> _createFtpDirectory(FTPConnect client) async {
-    final baseDir = Settings.getValue<String>('ftp_path') ?? '/scans';
-    final now = DateTime.now();
-
-    final datePath =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-    // ex: exports/2025-01-01
-    final fullPath = '$baseDir/$datePath';
-
-    await client.createFolderIfNotExist(baseDir);
-    await client.createFolderIfNotExist(fullPath);
-
-    return fullPath;
   }
 }

@@ -68,6 +68,7 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
         await Settings.setValue('ftp_password', ftp['password']);
         await Settings.setValue('ftp_path', ftp['path']);
         await Settings.setValue('use_sftp', ftp['use_sftp']);
+        await Settings.setValue('ftp_timeout', ftp['timeout']);
       }
 
       // EPCIS Config
@@ -238,13 +239,13 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
 
           // DATA EXPORT SETTINGS
           // -------------------------------------------------------------------
-          const ExpandableSettingsTile(
+          ExpandableSettingsTile(
             title: 'Data Export',
             subtitle: 'Configure data export methods',
             showDivider: false,
             children: [
               // HTTP Export Settings
-              SettingsGroup(
+              const SettingsGroup(
                 title: 'HTTP',
                 children: [
                   SwitchSettingsTile(
@@ -256,6 +257,7 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
                         settingKey: 'http_url',
                         initialValue: '',
                         helperText: 'HTTP endpoint to receive scan data',
+                        keyboardType: TextInputType.url,
                       ),
                       SwitchSettingsTile(
                         title: 'Authentication',
@@ -288,7 +290,7 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
                     settingKey: 'enable_ftp',
                     defaultValue: false,
                     childrenIfEnabled: [
-                      TextInputSettingsTile(
+                      const TextInputSettingsTile(
                         title: 'Server Address',
                         settingKey: 'ftp_server',
                         initialValue: '',
@@ -298,29 +300,77 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
                         title: 'Port',
                         settingKey: 'ftp_port',
                         initialValue: '21',
-                        helperText: 'Default: 21 (FTP), 22 (SFTP)',
+                        helperText: 'Default: 21 (FTP), 990 (FTPS)',
+                        validator: (String? value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Port is required';
+                          }
+                          try {
+                            final port = int.parse(value);
+                            if (port < 1 || port > 65535) {
+                              return 'Port must be between 1 and 65535';
+                            }
+                          } catch (e) {
+                            return 'Port must be a number';
+                          }
+                          return null;
+                        },
+                        keyboardType: TextInputType.number,
+                        errorColor: Colors.red,
                       ),
-                      TextInputSettingsTile(
+                      const TextInputSettingsTile(
                         title: 'Username',
                         settingKey: 'ftp_username',
                         initialValue: '',
                       ),
-                      TextInputSettingsTile(
+                      const TextInputSettingsTile(
                         title: 'Password',
                         settingKey: 'ftp_password',
                         initialValue: '',
                         obscureText: true,
                       ),
-                      TextInputSettingsTile(
-                        title: 'Remote Directory',
+                      const TextInputSettingsTile(
+                        title: 'Remote Path Template',
                         settingKey: 'ftp_path',
-                        initialValue: '',
-                        helperText: 'Directory path on the FTP server',
+                        initialValue: '/scans/[DATE]_scans_[TYPE].csv',
+                        helperText:
+                            'Full path template including filename. Placeholders:\n'
+                            '[DATE]=YYYY-MM-DD, [YEAR], [MONTH], [DAY]\n'
+                            '[SESSION_ID], [SESSION_NAME], [TYPE]\n'
+                            '[DEVICE], [LOCATION], [TIMESTAMP]',
                       ),
-                      SwitchSettingsTile(
-                        title: 'Use SFTP (Secure FTP)',
-                        settingKey: 'use_sftp',
+                      const RadioSettingsTile(
+                        title: 'Transfer Mode',
+                        settingKey: 'ftp_transfer_mode',
+                        selected: 'passive',
+                        values: {
+                          'passive': 'Passive Mode (recommended)',
+                          'active': 'Active Mode',
+                        },
+                        subtitle:
+                            'Passive mode is typically better for connections through firewalls',
+                      ),
+                      const RadioSettingsTile(
+                        title: 'Transfer Type',
+                        settingKey: 'ftp_transfer_type',
+                        selected: 'auto',
+                        values: {
+                          'auto': 'Auto-detect',
+                          'ascii': 'ASCII (text files)',
+                          'binary': 'Binary (all files)',
+                        },
+                        subtitle: 'Auto-detect will choose based on file type',
+                      ),
+                      const SwitchSettingsTile(
+                        title: 'Use FTPS (Secure FTP)',
+                        settingKey: 'use_ftps',
                         defaultValue: false,
+                      ),
+                      const TextInputSettingsTile(
+                        title: 'Timeout (seconds)',
+                        settingKey: 'ftp_timeout',
+                        initialValue: "30",
+                        helperText: 'FTP connection timeout in seconds',
                       ),
                     ],
                   ),

@@ -5,27 +5,29 @@ Supports various barcode formats and provides multiple options for data synchron
 
 ## What this is for
 
-This app is designed to be used in a warehouse or similar environment where you need to keep track
-of inventory.
+This app is designed for use in warehouses and similar environments where you need to track
+inventory counts. When you scan a barcode, the app keeps track of how many times you have scanned
+it, maintaining a running count for each unique barcode.
 
-You scan a barcode, and the app will keep track of how many times you have scanned it. You can then
-export the data to a CSV or JSON file, upload it to an FTP server, or send it to an HTTP endpoint to
-use in your own systems.
-
-This is meant to be "universal" in the sense that it can be configured to work with any system that
-can accept CSV or JSON files, or HTTP requests.
+The app offers multiple ways to get this data into your existing systems. You can export scans to
+CSV or JSON files, upload them directly to FTP servers, send them to HTTP endpoints, or integrate
+with supply chain systems through EPCIS. This flexibility makes it suitable for integration with
+virtually any inventory management system.
 
 ## Key Features
 
-- Scan barcodes using the device camera, each barcode is counted and displayed in a list.
-- Supports multiple barcode
-  formats [see supported formats](https://pub.dev/documentation/mobile_scanner/latest/mobile_scanner/BarcodeFormat.html).
-- Can integrate with external systems using Sharing of CSV or JSON files, direct HTTP POST requests,
-  or FTP uploads, also supports EPCIS events via HTTP Post.
-- Configurable settings for device name, location, scan interval, and sync options.
-- Bootstrap configuration using a remote JSON file (Fetch JSON config from a URL input or scan a QR
-  code with the URL), for quick setup and configuration of new devices.
-- Can work offline and sync data later when a connection is available.
+- Scan barcodes using the device camera with real-time count tracking
+- Support for multiple barcode formats including EAN-13, Code 128, QR Code, and
+  others ([see supported formats](https://pub.dev/documentation/mobile_scanner/latest/mobile_scanner/BarcodeFormat.html))
+- Export options:
+    - CSV files with detailed scan logs and inventory summaries
+    - JSON export of complete scan sessions
+    - Direct HTTP POST of scan data
+    - FTP/FTPS file uploads
+    - EPCIS 2.0 compliant event export
+- Configurable settings for device name, location, scan interval, and sync options
+- Remote configuration through JSON files (via URL or QR code scan)
+- Offline-capable with batch synchronization support
 
 ## Installation
 
@@ -49,16 +51,16 @@ fvm flutter run lib/main.dart -d
 fvm dart format lib
 ```
 
-## Remote JSON Config
+## Remote Configuration
 
-The app can be configured using a remote JSON file. The file should be placed in a public location
-and the URL should be provided in the app settings, or create a QR code with the URL and scan it in
-the app.
+The app can be bootstrapped using a remote JSON configuration file. You can either enter the URL
+directly in settings or scan a QR code containing the configuration URL. This makes it easy to
+deploy and configure multiple devices with the same settings.
 
-### Example Config
+### Example Configuration File
 
-This [gist](https://gist.githubusercontent.com/HelgeSverre/e2ce0369fd7492253f0b0ff8647e1c85/raw/d553b5b9951a46639b821ef5aa6a413b7e371da1/scanner.json)
-can be used for testing.
+This [configuration example](https://gist.githubusercontent.com/HelgeSverre/06f23f064a8c717dda87d1f0cd9cca9b/raw/765b58f84a7c3c3eea931c23c524edaca439613d/inventory-scanner-remote-config.json)
+can be used as a starting point:
 
 ```json
 {
@@ -85,8 +87,11 @@ can be used for testing.
     "port": "21",
     "username": "ftpuser",
     "password": "ftppass",
-    "path": "/scans",
-    "use_sftp": false
+    "path": "/scans/[LOCATION]/[DEVICE]/[YEAR]/[MONTH]/[SESSION_NAME]_[TYPE]_[TIMESTAMP].csv",
+    "use_ftps": false,
+    "timeout": 30,
+    "transfer_mode": "passive",
+    "transfer_type": "auto"
   },
   "epcis": {
     "namespace": "example",
@@ -98,15 +103,16 @@ can be used for testing.
 }
 ```
 
------
+## Data Export Features
 
-## Data Formats
+### HTTP Integration
 
-### Instant Sync (HTTP)
+The app provides two methods for sending scan data via HTTP:
 
-When instant sync is enabled, the app will send the scan data to the configured HTTP endpoint as
-soon
-as a scan is made. The data is sent as a JSON object with the following format:
+#### HTTP Instant Sync
+
+When instant sync is enabled, each scan is immediately sent to your configured endpoint. This is
+useful for real-time inventory tracking:
 
 ```json
 {
@@ -120,9 +126,10 @@ as a scan is made. The data is sent as a JSON object with the following format:
 }
 ```
 
-### HTTP Sync (Batch)
+#### HTTP Batch Sync
 
-When instant sync is disabled, the app will send all session data in a single batch:
+When instant sync is disabled, complete scanning sessions are sent in batches. This includes
+comprehensive session information, all scan events, and summary statistics:
 
 ```json
 {
@@ -150,13 +157,24 @@ When instant sync is disabled, the app will send all session data in a single ba
 }
 ```
 
-### CSV Export
+HTTP sync supports basic authentication and custom endpoints, making it suitable for integration
+with most web-based inventory systems.
 
-The app creates two CSV files for each export:
+### File-Based Export
 
-#### Event Log (session_[id]_events_[timestamp].csv)
+The app generates two types of CSV files for detailed record-keeping:
 
-Contains detailed records of each individual scan event:
+#### Event Log CSV
+
+The event log (session_[id]_events_[timestamp].csv) contains a detailed record of every scan,
+including:
+
+- Exact timestamp of each scan
+- Barcode value and format
+- Device and location information
+- Session tracking data
+
+Example event log:
 
 | timestamp                  | barcode       | format | device     | location    | session_id    | session_name  |
 |----------------------------|---------------|--------|------------|-------------|---------------|---------------|
@@ -167,9 +185,17 @@ Contains detailed records of each individual scan event:
 | 2025-02-02T06:50:22.456789 | 8710847111605 | ean13  | Scanner-01 | Warehouse-A | 1738475273155 | Morning Count |
 | 2025-02-02T06:51:15.567890 | 4006381333931 | ean13  | Scanner-01 | Warehouse-A | 1738475273155 | Morning Count |
 
-#### Inventory Summary (session_[id]_inventory_[timestamp].csv)
+#### Inventory Summary CSV
 
-Contains aggregated statistics for each unique barcode:
+The summary file (session_[id]_inventory_[timestamp].csv) provides aggregated statistics for each
+unique barcode:
+
+- Total count per barcode
+- First and last scan times
+- Device and location context
+- Session information
+
+Example summary:
 
 | device     | location    | barcode       | format | count | first_scan                 | last_scan                  | session_id    | session_name  |
 |------------|-------------|---------------|--------|-------|----------------------------|----------------------------|---------------|---------------|
@@ -178,26 +204,107 @@ Contains aggregated statistics for each unique barcode:
 | Scanner-01 | Warehouse-A | 4006381333931 | ean13  | 2     | 2025-02-02T06:49:01.234567 | 2025-02-02T06:51:15.567890 | 1738475273155 | Morning Count |
 | Scanner-01 | Warehouse-A | 8710847111605 | ean13  | 1     | 2025-02-02T06:50:22.456789 | 2025-02-02T06:50:22.456789 | 1738475273155 | Morning Count |
 
+### FTP Integration
+
+The app provides comprehensive FTP support with multiple configuration options to ensure
+compatibility with various FTP server setups:
+
+#### Security Options
+
+- Plain FTP: Standard unencrypted FTP using port 21
+- FTPS: FTP over SSL/TLS, typically using port 990, providing encrypted data transfer
+
+#### Transfer Mode Options
+
+- **Passive Mode** (Default): Ideal for most modern networks, especially when connecting through
+  firewalls. In this mode, the client initiates all connections, making it more firewall-friendly.
+- **Active Mode**: Traditional FTP mode where the server initiates the data connection. Useful in
+  specific network configurations or with legacy FTP servers.
+
+#### Transfer Type Options
+
+- **Auto-detect** (Default): Automatically selects the appropriate transfer mode:
+    - ASCII for CSV files (handles line ending conversions)
+    - Binary for all other file types
+- **ASCII Mode**: Specifically for text files, handles line ending conversions between different
+  operating systems
+- **Binary Mode**: Raw data transfer suitable for all file types, ensures exact byte-for-byte copies
+
+### Flexible Path Configuration
+
+The app supports flexible FTP path configuration using placeholders. You can customize both the
+directory structure and filenames in a single path template.
+
+#### Available Placeholders
+
+- `[DATE]` = Current date (YYYY-MM-DD)
+- `[YEAR]` = Current year
+- `[MONTH]` = Current month (01-12)
+- `[DAY]` = Current day (01-31)
+- `[DEVICE]` = Device name from settings
+- `[LOCATION]` = Device location from settings
+- `[SESSION_ID]` = Unique session identifier
+- `[SESSION_NAME]` = Name of the scan session
+- `[TYPE]` = File type ("events" or "inventory")
+- `[TIMESTAMP]` = Full ISO timestamp
+
+#### Example Path Templates
+
+1. Simple date-based organization (default):
+
+```
+/scans/[DATE]/session_[SESSION_ID]_[TYPE].csv
+→ /scans/2025-02-02/session_1738475273155_events.csv
+```
+
+2. Location and device-based organization:
+
+```
+/inventory/[LOCATION]/[DEVICE]/[DATE]_[SESSION_NAME]_[TYPE].csv
+→ /inventory/warehouse-a/scanner-01/2025-02-02_morning-count_events.csv
+```
+
+3. Year/month based archival structure:
+
+```
+/scans/[YEAR]/[MONTH]/[DEVICE]_[SESSION_NAME]_[TYPE]_[TIMESTAMP].csv
+→ /scans/2025/02/scanner-01_morning-count_events_2025-02-02T06-47-53.csv
+```
+
+The app automatically creates any required directories in the specified path. You can configure the
+path template through the settings screen or the remote configuration file.
+
 ### EPCIS Integration
 
-The app supports exporting data in EPCIS 2.0 format (Electronic Product Code Information Services),
-which is a GS1 standard for sharing supply chain event data between trading partners. EPCIS provides
-a standardized way to track and share information about the movement and status of products as they
-travel through the supply chain.
+The app supports EPCIS 2.0 (Electronic Product Code Information Services), a GS1 standard designed
+for sharing supply chain event data between trading partners. EPCIS integration is particularly
+valuable for organizations that need to:
 
-#### Core EPCIS Concepts:
+- Track product movement through the supply chain
+- Share inventory data with trading partners
+- Maintain compliance with traceability requirements
+- Integrate with larger supply chain management systems
 
-- **What**: The objects being tracked (identified by EPCs)
-- **When**: The time the event occurred
-- **Where**: The location of the objects (readPoint and bizLocation)
-- **Why**: The business context (bizStep and disposition)
+#### Why EPCIS?
 
-The app supports two different EPCIS event types:
+EPCIS provides a standardized way to answer four essential questions about inventory:
+
+- What: The objects being tracked (identified by EPCs)
+- When: The time each event occurred
+- Where: The location of objects (both read point and business location)
+- Why: The business context (business step and disposition)
+
+The app supports two EPCIS event types, each suited for different use cases:
 
 #### 1. Individual Scans (ObjectEvent)
 
-Uses `epcList` mode to record each scan as a separate observation. Best for tracking individual
-items and maintaining detailed scan history.
+Uses `epcList` mode to record each scan as a separate observation. This mode is ideal for:
+
+- Tracking individual items through the supply chain
+- Maintaining detailed scan history
+- Compliance with item-level traceability requirements
+
+Example ObjectEvent:
 
 ```json
 {
@@ -228,19 +335,15 @@ items and maintaining detailed scan history.
 }
 ```
 
-Key fields:
-
-- `type`: "ObjectEvent" indicates an observation of objects
-- `epcList`: Array of scanned items in EPC URI format
-- `action`: "OBSERVE" indicates items were seen but not changed
-- `bizStep`: Indicates this was an inventory check operation
-- `readPoint`: The specific location where the scan occurred
-- `bizLocation`: The broader business context of the scan
-
 #### 2. Aggregated Counts (AggregationEvent)
 
-Uses `quantityList` mode to record total counts for each unique barcode. Better for bulk inventory
-counts where individual scan timing isn't critical.
+Uses `quantityList` mode to record total counts for each unique barcode. This mode is better for:
+
+- Bulk inventory counts
+- Situations where individual scan timing isn't critical
+- Reducing data volume in high-throughput environments
+
+Example AggregationEvent:
 
 ```json
 {
@@ -275,31 +378,8 @@ counts where individual scan timing isn't critical.
 }
 ```
 
-Key fields:
-
-- `type`: "AggregationEvent" indicates grouping of objects
-- `parentID`: The location containing the items
-- `quantityList`: Array of item counts by type
-- `action`: "ADD" indicates items were added to the location
-- `bizStep`: Same as ObjectEvent, indicates inventory check
-- `readPoint`/`bizLocation`: Same as ObjectEvent
-
-The app follows the EPCIS 2.0 specification for event structure and vocabulary. For more details on
-EPCIS event types, fields, and best practices, refer to
-the [GS1 EPCIS 2.0 Specification](https://ref.gs1.org/epcis/?show=classes).
-
-### FTP Export
-
-When using FTP export, the app creates a directory structure like this:
-
-```
-/scans/                           # Base directory (configurable)
-  └── YYYY-MM-DD/                 # Date-based subdirectories
-      ├── session_[id]_events_[timestamp].csv      # Event log
-      └── session_[id]_inventory_[timestamp].csv    # Inventory summary
-```
-
-The CSV files follow the same format as described in the CSV Export section above.
+For more details on EPCIS event types, fields, and best practices, refer to
+the [GS1 EPCIS 2.0 Specification](https://ref.gs1.org/epcis/).
 
 ## License
 

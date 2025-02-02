@@ -23,6 +23,8 @@ dependencies:
   mobile_scanner: ^6.0.5
   wakelock_plus: ^1.2.10
   path: ^1.9.0
+  flutter_native_splash: ^2.4.4
+  icons_launcher: ^3.0.0
 
 dev_dependencies:
   flutter_test:

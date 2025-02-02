@@ -37,6 +37,9 @@ class ScannerApp extends StatelessWidget {
       title: 'Inventory Scanner',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        cardTheme: CardTheme.of(context).copyWith(
+          elevation: 0.5,
+        ),
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,
           // brightness: Brightness.dark,

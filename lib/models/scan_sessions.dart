@@ -271,13 +271,21 @@ class ScannerModel extends Model {
     notifyListeners();
   }
 
+  bool get syncViaHttp {
+    return Settings.getValue<bool>('enable_http', defaultValue: false) ?? false;
+  }
+
+  bool get syncViaFtp {
+    return Settings.getValue<bool>('enable_ftp', defaultValue: false) ?? false;
+  }
+
   Future<bool> processScan(Barcode barcode) async {
     if (_currentSession == null) return false;
 
-    print('======== SCANNED: $barcode - ${barcode.format.name}');
+    print('======== SCANNED: ${barcode.rawValue} - ${barcode.format.name}');
 
     // Check time between events setting
-    final double? minTimeBetweenScans = Settings.getValue<double>(
+    var minTimeBetweenScans = Settings.getValue<double>(
       'min_time_between_scans',
       defaultValue: 1000.0,
     );
@@ -300,19 +308,27 @@ class ScannerModel extends Model {
 
     // Handle instant sync if enabled
     if (Settings.getValue<bool>('instant_sync', defaultValue: false) ?? false) {
-      await _syncViaHttp(_currentSession!);
+      await _syncInstantScan(_currentSession!, event);
     }
 
     notifyListeners();
     return true;
   }
 
-  bool get syncViaHttp {
-    return Settings.getValue<bool>('enable_http', defaultValue: false) ?? false;
-  }
+// Add new method for instant sync
+  Future<void> _syncInstantScan(ScanSession session, ScanEvent event) async {
+    final useHttp =
+        Settings.getValue<bool>('enable_http', defaultValue: false) ?? false;
+    final useEpcis =
+        Settings.getValue<bool>('enable_epcis', defaultValue: false) ?? false;
 
-  bool get syncViaFtp {
-    return Settings.getValue<bool>('enable_ftp', defaultValue: false) ?? false;
+    if (useHttp) {
+      await _syncInstantHttp(session, event);
+    }
+
+    if (useEpcis) {
+      await _syncInstantEpcis(session, event);
+    }
   }
 
   Future<void> syncSession(ScanSession session) async {
@@ -334,6 +350,96 @@ class ScannerModel extends Model {
     } finally {
       await session.save();
       notifyListeners();
+    }
+  }
+
+  Future<void> _syncInstantHttp(ScanSession session, ScanEvent event) async {
+    final url = Settings.getValue<String>('http_url');
+    if (url == null || url.isEmpty) return;
+
+    final headers = {'Content-Type': 'application/json'};
+    final useAuth = Settings.getValue<bool>('http_use_auth') ?? false;
+
+    if (useAuth) {
+      final username = Settings.getValue<String>('http_username');
+      final password = Settings.getValue<String>('http_password');
+      if (username?.isNotEmpty == true && password?.isNotEmpty == true) {
+        headers['Authorization'] =
+            'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+      }
+    }
+
+    // Simple flat object for instant sync
+    final payload = {
+      'timestamp': event.timestamp.toIso8601String(),
+      'barcode': event.barcode,
+      'format': event.barcodeFormat,
+      'session_id': session.id,
+      'session_name': session.name,
+      'device': Settings.getValue<String>('device_name'),
+      'location': Settings.getValue<String>('device_location'),
+    };
+
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: headers,
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode != 200) {
+        print(
+            'Instant HTTP sync failed: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('Instant HTTP sync error: $e');
+    }
+  }
+
+  Future<void> _syncInstantEpcis(ScanSession session, ScanEvent event) async {
+    final url = Settings.getValue<String>('epcis_url');
+    if (url == null || url.isEmpty) return;
+
+    final namespace =
+        Settings.getValue<String>('epcis_namespace') ?? 'business';
+    final device = Settings.getValue<String>('epcis_device') ?? 'scanner-001';
+    final location =
+        Settings.getValue<String>('epcis_location') ?? 'location-001';
+
+    final payload = {
+      'epcisVersion': '2.0',
+      'schemaVersion': '2.0',
+      'creationDate': DateTime.now().toIso8601String(),
+      'epcisBody': {
+        'eventList': [
+          {
+            'type': 'ObjectEvent',
+            'eventTime': event.timestamp.toIso8601String(),
+            'eventTimeZoneOffset': '+00:00',
+            'epcList': ['urn:$namespace:item:${event.barcode}'],
+            'action': 'OBSERVE',
+            'bizStep': 'urn:epcglobal:cbv:btt:inventory_check',
+            'disposition': 'urn:epcglobal:cbv:disp:in_progress',
+            'readPoint': {'id': 'urn:$namespace:location:$location'},
+            'bizLocation': {'id': 'urn:$namespace:device:$device'}
+          }
+        ]
+      }
+    };
+
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode != 200) {
+        print(
+            'Instant EPCIS sync failed: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('Instant EPCIS sync error: $e');
     }
   }
 

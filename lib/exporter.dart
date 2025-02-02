@@ -21,17 +21,24 @@ class DataExporter {
     final summary = await _createCsvSummary(session, directory, timestamp);
 
     await Share.shareXFiles(
-      [XFile(eventLog.path), XFile(summary.path)],
+      [
+        XFile(eventLog.path),
+        XFile(summary.path),
+      ],
       subject: 'Scan Session ${session.name} - CSV Export',
     );
 
     // Cleanup
-    await Future.wait([eventLog.delete(), summary.delete()]);
+    await Future.wait([
+      eventLog.delete(),
+      summary.delete(),
+    ]);
   }
 
   static Future<void> shareJson(ScanSession session) async {
-    final jsonString =
-        const JsonEncoder.withIndent('  ').convert(_formatJson(session));
+    final jsonString = const JsonEncoder.withIndent('  ').convert(
+      _formatJson(session),
+    );
     await Share.share(
       jsonString,
       subject: 'Scan Session ${session.name} - JSON Export',
@@ -139,20 +146,26 @@ class DataExporter {
         Settings.getValue<String>('device_location', defaultValue: '');
 
     final rows = [
-      ['Session Name', session.name],
-      ['Session ID', session.id],
-      ['Start Time', session.startedAt.toIso8601String()],
-      ['End Time', session.finishedAt?.toIso8601String() ?? 'Active'],
-      ['Device', device],
-      ['Location', location],
-      [],
-      ['Scan Time', 'Barcode', 'Format', 'Device', 'Location'],
+      // Simple header row with column names
+      [
+        'timestamp',
+        'barcode',
+        'format',
+        'device',
+        'location',
+        'session_id',
+        'session_name'
+      ],
+
+      // Data rows
       ...session.events.map((e) => [
             e.timestamp.toIso8601String(),
             e.barcode,
             e.barcodeFormat,
             device,
             location,
+            session.id,
+            session.name,
           ]),
     ];
 
@@ -165,52 +178,69 @@ class DataExporter {
   }
 
   static Future<File> _createCsvSummary(
-      ScanSession session, Directory directory, String timestamp) async {
-    final device = Settings.getValue<String>('device_name',
-        defaultValue: 'Unknown Device');
+    ScanSession session,
+    Directory directory,
+    String timestamp,
+  ) async {
+    final device = Settings.getValue<String>(
+      'device_name',
+      defaultValue: 'Unknown Device',
+    );
     final location =
         Settings.getValue<String>('device_location', defaultValue: '');
 
+    // Group and sort events
     final barcodeGroups = <String, List<ScanEvent>>{};
     for (final event in session.events) {
       barcodeGroups.putIfAbsent(event.barcode, () => []).add(event);
     }
 
     final rows = [
-      ['Session Name', session.name],
-      ['Session ID', session.id],
-      ['Total Scans', session.events.length.toString()],
-      ['Unique Items', barcodeGroups.length.toString()],
-      ['Device', device],
-      ['Location', location],
-      [],
-      ['Barcode', 'Quantity', 'First Scan', 'Last Scan', 'Format'],
+      // Simple header row with column names
+      [
+        'device',
+        'location',
+        'barcode',
+        'format',
+        'count',
+        'first_scan',
+        'last_scan',
+        'session_id',
+        'session_name'
+      ],
+
+      // Data rows
       ...barcodeGroups.entries.map((entry) {
         final events = entry.value
-          ..sort((a, b) => a.timestamp.compareTo(b.timestamp))
-          ..toList();
-
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
         return [
+          device,
+          location,
           entry.key,
+          events.first.barcodeFormat,
           events.length.toString(),
           events.first.timestamp.toIso8601String(),
           events.last.timestamp.toIso8601String(),
-          events.first.barcodeFormat,
+          session.id,
+          session.name,
         ];
       }),
     ];
 
-    final file = File(
-      path.join(directory.path, 'session_${session.id}_summary_$timestamp.csv'),
-    );
+    final file = File(path.join(
+      directory.path,
+      'session_${session.id}_inventory_$timestamp.csv',
+    ));
     await file.writeAsString(const ListToCsvConverter().convert(rows));
 
     return file;
   }
 
   static Map<String, dynamic> _formatJson(ScanSession session) {
-    final device = Settings.getValue<String>('device_name',
-        defaultValue: 'Unknown Device');
+    final device = Settings.getValue<String>(
+      'device_name',
+      defaultValue: 'Unknown Device',
+    );
     final location =
         Settings.getValue<String>('device_location', defaultValue: '');
 

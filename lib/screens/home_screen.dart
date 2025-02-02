@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 import 'package:inventory_scanner/models/scan_sessions.dart';
 import 'package:inventory_scanner/scanner.dart';
+import 'package:inventory_scanner/screens/session_detail.dart';
 import 'package:inventory_scanner/screens/session_history.dart';
 import 'package:inventory_scanner/screens/settings_screen.dart';
 import 'package:scoped_model/scoped_model.dart';
@@ -15,9 +16,9 @@ class HomeScreen extends StatelessWidget {
       builder: (context, child, model) {
         return Scaffold(
           appBar: AppBar(
-            leading: const Icon(Icons.qr_code),
+            leading: const Icon(Icons.timelapse_outlined),
             // backgroundColor: Color(0xff011A99),
-            centerTitle: true,
+            // centerTitle: true,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -255,8 +256,12 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        ...recentSessions
-            .map((session) => _RecentSessionTile(session: session)),
+        ...recentSessions.map(
+          (session) => InkWell(
+            onTap: () => _viewSessionDetails(context, session),
+            child: _RecentSessionTile(session: session),
+          ),
+        ),
       ],
     );
   }
@@ -282,8 +287,11 @@ class HomeScreen extends StatelessWidget {
   }
 
   void _viewSessionDetails(BuildContext context, ScanSession session) {
-    // Navigate to session details screen
-    // Implementation pending
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SessionDetailsScreen(session: session),
+      ),
+    );
   }
 
   Future<void> _syncAllSessions(

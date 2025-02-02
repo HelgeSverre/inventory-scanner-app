@@ -59,7 +59,7 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
                     ),
                     const PopupMenuItem(
                       value: 'upload_http',
-                      child: Text('Upload to Server'),
+                      child: Text('Upload to HTTP'),
                     ),
                     const PopupMenuItem(
                       value: 'upload_epcis',
@@ -346,7 +346,10 @@ class _SessionDetailsScreenState extends State<SessionDetailsScreen> {
   }
 
   Future<void> _handleMenuAction(
-      BuildContext context, String action, ScannerModel model) async {
+    BuildContext context,
+    String action,
+    ScannerModel model,
+  ) async {
     try {
       switch (action) {
         case 'export_csv':

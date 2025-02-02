@@ -266,9 +266,21 @@ class _SessionStartScreenState extends State<_SessionStartScreen> {
   final _sessionNameController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+
+    _sessionNameController.text = ScannerModel.defaultSessionName();
+  }
+
+  @override
   void dispose() {
     _sessionNameController.dispose();
     super.dispose();
+  }
+
+  void _startSession() {
+    final name = _sessionNameController.text.trim();
+    widget.onStartSession(name.isEmpty ? null : name);
   }
 
   @override
@@ -317,11 +329,6 @@ class _SessionStartScreenState extends State<_SessionStartScreen> {
         ),
       ),
     );
-  }
-
-  void _startSession() {
-    final name = _sessionNameController.text.trim();
-    widget.onStartSession(name.isEmpty ? null : name);
   }
 }
 

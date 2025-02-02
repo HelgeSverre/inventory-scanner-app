@@ -155,17 +155,30 @@ class ScannerModel extends Model {
     _sessionsBox = await Hive.openBox<ScanSession>('scan_sessions');
   }
 
+  static String defaultSessionName() {
+    var prefix = Settings.getValue<String>(
+          'scan_session_prefix',
+        ) ??
+        'Scan on [DATE]';
+
+    var device = Settings.getValue<String>('device_name') ?? '';
+    var location = Settings.getValue<String>('device_location') ?? '';
+
+    var date = DateTime.now().toString().split(' ')[0];
+
+    var generated = prefix
+        .replaceFirst('[DATE]', date)
+        .replaceFirst('[DEVICE]', device)
+        .replaceFirst('[LOCATION]', location);
+
+    return generated;
+  }
+
   // Session Management
   Future<void> startNewSession([String? name]) async {
-    var prefix = Settings.getValue<String>(
-          'file_prefix',
-          defaultValue: 'Scan on ',
-        ) ??
-        'Scan on ';
-
     _currentSession = ScanSession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name ?? '${prefix} ${DateTime.now().toString().split(' ')[0]}',
+      name: name ?? defaultSessionName(),
       startedAt: DateTime.now(),
     );
 

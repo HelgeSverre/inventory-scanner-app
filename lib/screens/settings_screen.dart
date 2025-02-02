@@ -94,23 +94,32 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
     }
   }
 
+  _scanQrCode() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const QRScannerScreen(),
+      ),
+    ).then((url) {
+      if (url != null) {
+        print(url);
+        fetchConfigFromUrl(url);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     var interval = Settings.getValue<double>('min_time_between_scans');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Settings'),
+        title: const Text('Settings'),
         actions: [
           IconButton(
             tooltip: 'Load config from URL with QR-Code',
             icon: const Icon(Icons.qr_code_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const AppSettingScreen(),
-              ),
-            ),
+            onPressed: () => _scanQrCode(),
           ),
         ],
       ),
@@ -133,6 +142,12 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
                 settingKey: 'device_location',
                 initialValue: '',
                 helperText: 'Example: Warehouse A, Van-12',
+              ),
+              const TextInputSettingsTile(
+                title: 'Session name prefix',
+                settingKey: 'scan_session_prefix',
+                initialValue: 'Scan on [DATE]',
+                helperText: 'Scan on [DATE]',
               ),
               SliderSettingsTile(
                 title: 'Scan Interval (${interval?.toInt()}ms)',
@@ -158,33 +173,17 @@ class _AppSettingScreenState extends State<AppSettingScreen> {
 
           // REMOTE CONFIGURATION
           // -------------------------------------------------------------------
-          ExpandableSettingsTile(
+          const ExpandableSettingsTile(
             title: 'Remote Configuration',
             subtitle: 'Settings for remote configuration service',
             children: [
-              IconButton(
-                icon: const Icon(Icons.qr_code_scanner),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const QRScannerScreen(),
-                    ),
-                  ).then((url) {
-                    if (url != null) {
-                      print(url);
-                      fetchConfigFromUrl(url);
-                    }
-                  });
-                },
-              ),
-              const TextInputSettingsTile(
+              TextInputSettingsTile(
                 title: 'Device ID',
                 settingKey: 'remote_config_id',
                 helperText: 'Leave blank to auto-generate device identifier',
                 initialValue: '',
               ),
-              const TextInputSettingsTile(
+              TextInputSettingsTile(
                 title: 'Service URL',
                 settingKey: 'remote_config_url',
                 helperText: 'URL of the remote configuration service',

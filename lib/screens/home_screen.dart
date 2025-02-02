@@ -75,6 +75,7 @@ class HomeScreen extends StatelessWidget {
                   // Recent Activity
                   if (model.sessions.isNotEmpty)
                     _buildRecentActivity(context, model),
+                  const SizedBox(height: 48),
                 ],
               ),
             ),

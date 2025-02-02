@@ -1,9 +1,8 @@
-// settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_settings_screens/flutter_settings_screens.dart';
 
-class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key});
+class AppSettingScreen extends StatelessWidget {
+  const AppSettingScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

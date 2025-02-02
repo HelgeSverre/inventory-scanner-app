@@ -197,8 +197,10 @@ class ScannerModel extends Model {
 
   Future<void> removeLastEventForBarcode(String barcode) async {
     if (_currentSession != null) {
-      final index =
-          _currentSession!.events.lastIndexWhere((e) => e.barcode == barcode);
+      final index = _currentSession!.events.lastIndexWhere(
+        (e) => e.barcode == barcode,
+      );
+
       if (index != -1) {
         _currentSession!.events.removeAt(index);
         await _currentSession!.save();
@@ -207,13 +209,20 @@ class ScannerModel extends Model {
     }
   }
 
-  Future<void> addEventForBarcode(String barcode, String barcodeType) async {
+  Future<void> incrementScanCountForBarcode(String barcode) async {
     if (_currentSession != null) {
+      var lastScan = _currentSession?.events.lastWhere(
+        (e) => e.barcode == barcode,
+      );
+
+      if (lastScan == null) return;
+
       final event = ScanEvent(
-        barcode: barcode,
-        barcodeFormat: barcodeType,
+        barcode: lastScan.barcode,
+        barcodeFormat: lastScan.barcodeFormat,
         timestamp: DateTime.now(),
       );
+
       _currentSession!.events.add(event);
       await _currentSession!.save();
       notifyListeners();

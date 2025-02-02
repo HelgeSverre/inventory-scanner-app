@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:inventory_scanner/models/scan_sessions.dart';
+import 'package:inventory_scanner/widgets/panel.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:scoped_model/scoped_model.dart';
 
@@ -12,19 +13,48 @@ class ScannerScreen extends StatefulWidget {
 }
 
 class _ScannerScreenState extends State<ScannerScreen>
-    with WidgetsBindingObserver {
-  final MobileScannerController _cameraController = MobileScannerController();
+    with SingleTickerProviderStateMixin {
+  final _cameraController = MobileScannerController();
+  final panelController = SlidingUpPanelController();
+  final GlobalKey<AnimatedListState> listKey = GlobalKey<AnimatedListState>();
+
   bool _isFlashOn = false;
   bool _isCameraInitialized = false;
+  bool manuallyCollapsedPanel = false;
+  SlidingUpPanelStatus currentPanelStatus = SlidingUpPanelStatus.collapsed;
+
+  late final AnimationController flashController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 500),
+  );
+
+  late final colorTween = ColorTween(
+    begin: Colors.transparent,
+    end: Colors.white.withOpacity(0.3),
+  ).animate(
+    CurvedAnimation(
+      parent: flashController,
+      curve: Curves.easeOut,
+    ),
+  );
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.immersiveSticky,
-    );
+    panelController.addListener(() {
+      setState(() {
+        currentPanelStatus = panelController.status;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    flashController.dispose();
+    panelController.dispose();
+    _cameraController.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeCamera() async {
@@ -36,22 +66,33 @@ class _ScannerScreenState extends State<ScannerScreen>
     }
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _initializeCamera();
-    } else if (state == AppLifecycleState.paused) {
-      _cameraController.stop();
-    }
-  }
-
   Future<void> _onDetect(BarcodeCapture capture) async {
     final model = ScopedModel.of<ScannerModel>(context);
     for (final barcode in capture.barcodes) {
       var accepted = await model.processScan(barcode);
-
       if (accepted) {
         HapticFeedback.mediumImpact();
+
+        listKey.currentState
+            ?.insertItem(0, duration: const Duration(milliseconds: 250));
+
+        // If this is the first scan, anchor the panel
+        if (model.currentSession?.barcodeCounts.length == 1) {
+          panelController.anchor();
+        }
+        // If continuing to scan and panel wasn't manually collapsed, expand it
+        else if (!manuallyCollapsedPanel &&
+            model.currentSession?.barcodeCounts.length != null) {
+          panelController.expand();
+        }
+
+        // Trigger screen flash
+        flashController.forward().then((_) {
+          Future.delayed(
+            const Duration(milliseconds: 250),
+            () => flashController.reverse(),
+          );
+        });
       }
     }
   }
@@ -60,6 +101,8 @@ class _ScannerScreenState extends State<ScannerScreen>
   Widget build(BuildContext context) {
     return ScopedModelDescendant<ScannerModel>(
       builder: (context, child, model) {
+        var scanCounts = model.currentSession?.barcodeCounts;
+
         if (!model.hasActiveSession) {
           return _SessionStartScreen(
             onStartSession: (name) {
@@ -85,28 +128,210 @@ class _ScannerScreenState extends State<ScannerScreen>
                   ),
                 ),
 
-              // Scanner UI Overlay
-              SafeArea(
-                child: Column(
-                  children: [
-                    // Top Bar
-                    _buildTopBar(model),
+              // Scanner UI Overlay with scanning rectangle
+              _buildScanAreaOverlay(),
 
-                    // Scanning Area
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 40),
-                          _buildScannerOverlay(),
-                          const SizedBox(height: 40),
-                        ],
+              // Camera Controls (flash, switch camera)
+              _buildCameraControls(),
+
+              // Sliding Panel
+              Positioned(
+                // duration: const Duration(milliseconds: 200),
+                // curve: Curves.easeInOut,
+                right: 0,
+                left: 0,
+                top: 300,
+                bottom: currentPanelStatus == SlidingUpPanelStatus.collapsed
+                    ? 25
+                    : 0,
+                child: SlidingUpPanelWidget(
+                  anchor: 0.5,
+                  panelController: panelController,
+                  controlHeight: kBottomNavigationBarHeight,
+                  enableOnTap: false,
+                  onTap: () => _handlePanelTap(),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      // Panel Header
+                      Container(
+                        height: kBottomNavigationBarHeight,
+                        padding: const EdgeInsets.only(left: 16),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(12)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Scanned Items (${(model.currentSession?.barcodeCounts ?? []).length})',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    model.currentSession?.name ?? '',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Chevron
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              height: kBottomNavigationBarHeight,
+                              width: kBottomNavigationBarHeight,
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  left: BorderSide(
+                                    color: Colors.grey[300]!,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                              child: AnimatedRotation(
+                                turns: currentPanelStatus ==
+                                        SlidingUpPanelStatus.collapsed
+                                    ? 0.75
+                                    : 0.25,
+                                duration: const Duration(milliseconds: 250),
+                                child: IconButton(
+                                  icon: const Icon(Icons.chevron_right),
+                                  onPressed: _handlePanelTap,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
 
-                    // Bottom Area
-                    _ScannedItemsSheet(model: model),
-                  ],
+                      // Divider
+                      Container(
+                        height: 1,
+                        color: Colors.grey[400],
+                      ),
+
+                      // Scanned Items List
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          color: Colors.white,
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: scanCounts?.length ?? 0,
+                            itemBuilder: (context, index) {
+                              var entry =
+                                  model.currentSession!.barcodeCounts[index];
+
+                              return Card(
+                                child: Dismissible(
+                                  key: Key(entry.key),
+                                  background: Container(
+                                    color: Colors.red,
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 16),
+                                    child: const Icon(Icons.delete,
+                                        color: Colors.white),
+                                  ),
+                                  direction: DismissDirection.endToStart,
+                                  onDismissed: (_) {
+                                    model.removeBarcode(entry.key);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        // Barcode info
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                entry.key,
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                              Text(
+                                                model.currentSession!.events
+                                                    .firstWhere((e) =>
+                                                        e.barcode == entry.key)
+                                                    .barcodeFormat
+                                                    .toUpperCase(),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        // Count controls
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.remove_circle_outline),
+                                              onPressed: entry.value > 1
+                                                  ? () => model
+                                                      .removeLastEventForBarcode(
+                                                          entry.key)
+                                                  : null,
+                                              color: entry.value > 1
+                                                  ? Colors.blue
+                                                  : Colors.grey[400],
+                                            ),
+                                            SizedBox(
+                                              width: 32,
+                                              child: Text(
+                                                entry.value.toString(),
+                                                style: const TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                  Icons.add_circle_outline),
+                                              onPressed: () => model
+                                                  .incrementScanCountForBarcode(
+                                                      entry.key),
+                                              color: Colors.blue,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -116,140 +341,87 @@ class _ScannerScreenState extends State<ScannerScreen>
     );
   }
 
-  Widget _buildTopBar(ScannerModel model) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  model.currentSession?.name ?? '',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  '${model.currentSession?.events.length ?? 0} scans',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: Icon(
-              _isFlashOn ? Icons.flash_on : Icons.flash_off,
-              color: Colors.white,
-            ),
-            onPressed: () {
-              setState(() {
-                _isFlashOn = !_isFlashOn;
-                _cameraController.toggleTorch();
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: () => _showEndSessionDialog(context, model),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildScanAreaOverlay() {
+    double ratio = 1.5;
+    double width = MediaQuery.of(context).size.shortestSide * .8;
+    double height = width / ratio;
 
-  Widget _buildScannerOverlay() {
-    return Center(
-      child: Container(
-        width: 280,
-        height: 280,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.white, width: 2),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Stack(
-            children: [
-              // Scanning line animation
-              AnimatedPositioned(
-                duration: const Duration(seconds: 1),
-                top: 0,
-                left: 0,
-                right: 0,
-                curve: Curves.easeInOut,
-                child: Container(
-                  height: 2,
-                  color: Colors.red.withOpacity(0.8),
-                ),
-              ),
-            ],
+    return AnimatedAlign(
+      curve: Curves.easeInOutCubicEmphasized,
+      duration: const Duration(milliseconds: 300),
+      alignment: currentPanelStatus == SlidingUpPanelStatus.collapsed
+          ? Alignment.center
+          : const Alignment(0.0, -0.5),
+      child: AnimatedBuilder(
+        animation: flashController,
+        builder: (context, _) => Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: colorTween.value,
+            border: Border.all(color: Colors.white, width: 2),
+            borderRadius: BorderRadius.circular(5),
           ),
         ),
       ),
     );
   }
 
-  Future<void> _showEndSessionDialog(BuildContext context, ScannerModel model) {
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('End Session?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildCameraControls() {
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.topRight,
+        child: Column(
           children: [
-            Text('End session "${model.currentSession?.name}"?'),
-            const SizedBox(height: 8),
-            Text(
-              '${model.currentSession?.events.length ?? 0} items scanned',
-              style: TextStyle(color: Colors.grey[600]),
+            IconButton(
+              icon: Icon(
+                _isFlashOn ? Icons.flash_on : Icons.flash_off,
+                color: Colors.white,
+              ),
+              onPressed: () {
+                setState(() {
+                  _isFlashOn = !_isFlashOn;
+                  _cameraController.toggleTorch();
+                });
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios, color: Colors.white),
+              onPressed: () => _cameraController.switchCamera(),
+            ),
+            IconButton(
+              icon: const Icon(Icons.code, color: Colors.red),
+              onPressed: () {
+                ScopedModel.of<ScannerModel>(context).processScan(
+                  const Barcode(
+                    format: BarcodeFormat.ean13,
+                    rawValue: '7071089087940',
+                  ),
+                );
+              },
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          FilledButton(
-            child: const Text('End Session'),
-            onPressed: () {
-              model.endCurrentSession();
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Return to home
-            },
-          ),
-        ],
       ),
     );
+  }
+
+  void _handlePanelTap() {
+    setState(() {
+      manuallyCollapsedPanel = true;
+
+      return currentPanelStatus == SlidingUpPanelStatus.collapsed
+          ? panelController.anchor()
+          : panelController.collapse();
+    });
   }
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _cameraController.dispose();
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.edgeToEdge,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
-    super.dispose();
   }
 }
 
@@ -268,7 +440,6 @@ class _SessionStartScreenState extends State<_SessionStartScreen> {
   @override
   void initState() {
     super.initState();
-
     _sessionNameController.text = ScannerModel.defaultSessionName();
   }
 
@@ -326,146 +497,6 @@ class _SessionStartScreenState extends State<_SessionStartScreen> {
               onPressed: _startSession,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ScannedItemsSheet extends StatelessWidget {
-  final ScannerModel model;
-
-  const _ScannedItemsSheet({required this.model});
-
-  @override
-  Widget build(BuildContext context) {
-    final items = model.currentSession?.barcodeCounts ?? [];
-
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.4,
-      ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(20),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          // Header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Text(
-                  'Scanned Items (${items.length})',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                if (items.isNotEmpty)
-                  TextButton.icon(
-                    icon: const Icon(Icons.undo),
-                    label: const Text('Undo'),
-                    onPressed: model.undoLastScan,
-                  ),
-              ],
-            ),
-          ),
-          // List
-          Flexible(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final entry = items[index];
-                return _ScannedItemTile(
-                  barcode: entry.key,
-                  count: entry.value,
-                  model: model,
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScannedItemTile extends StatelessWidget {
-  final String barcode;
-  final int count;
-  final ScannerModel model;
-
-  const _ScannedItemTile({
-    required this.barcode,
-    required this.count,
-    required this.model,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Dismissible(
-      key: Key(barcode),
-      background: Container(
-        color: Colors.red,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 16),
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      direction: DismissDirection.endToStart,
-      onDismissed: (_) => model.removeBarcode(barcode),
-      child: Card(
-        child: ListTile(
-          title: Text(
-            barcode,
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          subtitle: Text(
-            model.currentSession!.events
-                .firstWhere((e) => e.barcode == barcode)
-                .barcodeFormat
-                .toUpperCase(),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline),
-                onPressed: count > 1
-                    ? () => model.removeLastEventForBarcode(barcode)
-                    : null,
-              ),
-              Text(
-                count.toString(),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                onPressed: () => model.incrementScanCountForBarcode(barcode),
-              ),
-            ],
-          ),
         ),
       ),
     );
